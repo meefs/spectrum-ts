@@ -1,11 +1,10 @@
 import z from "zod";
-import { channelProviderConfigSchema, type AnyChannelProvider } from "./channel";
-import type { Content } from "./content";
+import type { PlatformProviderConfig } from "./platform/type";
 
 const specturmConfigSchema = z.object({
-    projectID: z.string(),
-    projectSecret: z.string(),
-    providers: z.array(channelProviderConfigSchema)
+    projectID: z.string().min(1),
+    projectSecret: z.string().min(1),
+    providers: z.array(z.custom<PlatformProviderConfig>())
 })
 
 type SpectrumConfig = z.infer<typeof specturmConfigSchema>;
@@ -15,13 +14,5 @@ export class Spectrum {
     
     constructor(config: SpectrumConfig) {
         this.config = config;
-    }
-    
-    // Public APIs
-    
-    send(recipient: string, channel: AnyChannelProvider, content: Content) {}
-    
-    on() {
-        
     }
 }
