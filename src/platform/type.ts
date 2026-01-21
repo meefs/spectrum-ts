@@ -35,28 +35,26 @@ export type PlatformProviderConfig = {
 
 export type PlatformDef<
     _SpacesDef extends SpacesDef,
-    _ProviderSchema extends z.ZodType<object>,
-    _ConfigBuilder extends (config: z.infer<_ProviderSchema>) => Promise<object>,
+    _ConfigSchema extends z.ZodType<object>,
     _UserSchema extends z.ZodType<object>,
 > = {
     name: string;
     spaces: _SpacesDef;
     defaultDirect: KeysBySpaceKindType<_SpacesDef, "direct">;
     defaultGroup: KeysBySpaceKindType<_SpacesDef, "group">;
-    providerSchema: _ProviderSchema;
-    resolveConfig: _ConfigBuilder;
+    config: {
+        schema: _ConfigSchema;
+    };
     userSchema: _UserSchema;
-    resolveUser: (_: {
-        config: Awaited<ReturnType<_ConfigBuilder>>;
-    }) => Promise<BaseUser & KnownKeys<z.infer<_UserSchema>>>;
+    resolveUser: (_: { config: z.infer<_ConfigSchema> }) => Promise<BaseUser & KnownKeys<z.infer<_UserSchema>>>;
 };
 
-type AnyPlatformDef = PlatformDef<any, any, any, any>;
+type AnyPlatformDef = PlatformDef<any, any, any>;
 
-export type Platform<_PlatformDef extends PlatformDef<any, any, any, any>> = ((
+export type Platform<_PlatformDef extends PlatformDef<any, any, any>> = ((
     spectrum: BaseSpectrum,
 ) => Platform.Spectrum<_PlatformDef>) & {
-    config(config: z.input<_PlatformDef["providerSchema"]>): PlatformProviderConfig;
+    config(config: z.input<_PlatformDef["config"]["schema"]>): PlatformProviderConfig;
 };
 
 namespace Platform {
@@ -70,11 +68,10 @@ namespace Platform {
 export function definePlatform<
     _SpacesDef extends SpacesDef,
     _ProviderSchema extends z.ZodType<object>,
-    _ConfigBuilder extends (config: z.infer<_ProviderSchema>) => Promise<object>,
     _UserSchema extends z.ZodType<object>,
 >(
-    def: PlatformDef<_SpacesDef, _ProviderSchema, _ConfigBuilder, _UserSchema>,
-): Platform<PlatformDef<_SpacesDef, _ProviderSchema, _ConfigBuilder, _UserSchema>> {
+    def: PlatformDef<_SpacesDef, _ProviderSchema, _UserSchema>,
+): Platform<PlatformDef<_SpacesDef, _ProviderSchema, _UserSchema>> {
     return null as any;
 }
 
@@ -90,25 +87,22 @@ const imessage = definePlatform({
     },
     defaultDirect: "dm",
     defaultGroup: "group",
-    providerSchema: z.object({
-        useLocal: z.boolean().default(false),
-    }),
-    resolveConfig: async (config) => {
-        return {
-            useLocal: config.useLocal,
-        };
+    config: {
+        schema: z.object({
+            useLocal: z.boolean().default(false),
+        }),
     },
     userSchema: z.object({
         test: z.object({
             name: z.string().min(2).max(100),
-        })
+        }),
     }),
     resolveUser: async ({ config }) => {
         return {
             id: "ss",
             test: {
-                name: "John Doe"
-            }
+                name: "John Doe",
+            },
         };
     },
 });
