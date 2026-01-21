@@ -1,5 +1,5 @@
 import z from "zod";
-import type { PlatformProviderConfig } from "./platform/type";
+import type { PlatformProviderConfig } from "../platform/type";
 
 const specturmConfigSchema = z.object({
     projectID: z.string().min(1),

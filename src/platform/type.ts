@@ -1,6 +1,7 @@
 import type { Fn, Objects, Pipe } from "hotscript";
 import z from "zod";
-import { Spectrum, type Spectrum as BaseSpectrum } from "../core";
+import { type Spectrum as BaseSpectrum, Spectrum } from "../core/platform";
+import type { User as BaseUser } from "../core/user";
 
 const SpaceKind = {
     Direct: "direct",
@@ -22,39 +23,58 @@ interface HasSpaceKindType<Kind extends SpaceKindType> extends Fn {
 type KeysBySpaceKindType<Spaces extends SpacesDef, Kind extends SpaceKindType> = Pipe<
     Spaces,
     [Objects.PickBy<HasSpaceKindType<Kind>>, Objects.Keys]
-    >;
+>;
+
+type KnownKeys<T> = {
+    [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K];
+};
 
 export type PlatformProviderConfig = {
-    __tag: "PlatformProviderConfig"
-}
+    __tag: "PlatformProviderConfig";
+};
 
-export type PlatformDef<_SpacesDef extends SpacesDef, _ProviderSchema extends z.ZodType<object>, _ConfigBuilder extends (config: z.infer<_ProviderSchema>) => Promise<object>> = {
+export type PlatformDef<
+    _SpacesDef extends SpacesDef,
+    _ProviderSchema extends z.ZodType<object>,
+    _ConfigBuilder extends (config: z.infer<_ProviderSchema>) => Promise<object>,
+    _UserSchema extends z.ZodType<object>,
+> = {
     name: string;
     spaces: _SpacesDef;
     defaultDirect: KeysBySpaceKindType<_SpacesDef, "direct">;
     defaultGroup: KeysBySpaceKindType<_SpacesDef, "group">;
     providerSchema: _ProviderSchema;
-    configBuilder: _ConfigBuilder;
-    userBuilder: (_: {config: Awaited<ReturnType<_ConfigBuilder>>}) => Promise<string>;
+    resolveConfig: _ConfigBuilder;
+    userSchema: _UserSchema;
+    resolveUser: (_: {
+        config: Awaited<ReturnType<_ConfigBuilder>>;
+    }) => Promise<BaseUser & KnownKeys<z.infer<_UserSchema>>>;
 };
 
-export type Platform<_PlatformDef extends PlatformDef<any, any, any>> = ((
+type AnyPlatformDef = PlatformDef<any, any, any, any>;
+
+export type Platform<_PlatformDef extends PlatformDef<any, any, any, any>> = ((
     spectrum: BaseSpectrum,
-) => Platform.Spectrum<_PlatformDef>) & ({
+) => Platform.Spectrum<_PlatformDef>) & {
     config(config: z.input<_PlatformDef["providerSchema"]>): PlatformProviderConfig;
-})
+};
 
 namespace Platform {
-    export type Spectrum<_PlatformDef extends PlatformDef<any, any, any>> = BaseSpectrum & {
-        user(userID: string): void;
+    export type Spectrum<_PlatformDef extends AnyPlatformDef> = BaseSpectrum & {
+        user(userID: string): User<_PlatformDef>;
     };
 
-    export type User<_PlatformDef extends PlatformDef<any, any, any>> = {};
+    export type User<_PlatformDef extends AnyPlatformDef> = BaseUser & z.infer<_PlatformDef["userSchema"]>;
 }
 
-export function definePlatform<_SpacesDef extends SpacesDef, _ProviderSchema extends z.ZodType<object>, _ConfigBuilder extends (config: z.infer<_ProviderSchema>) => Promise<object>>(
-    def: PlatformDef<_SpacesDef, _ProviderSchema, _ConfigBuilder>,
-): Platform<PlatformDef<_SpacesDef, _ProviderSchema, _ConfigBuilder>> {
+export function definePlatform<
+    _SpacesDef extends SpacesDef,
+    _ProviderSchema extends z.ZodType<object>,
+    _ConfigBuilder extends (config: z.infer<_ProviderSchema>) => Promise<object>,
+    _UserSchema extends z.ZodType<object>,
+>(
+    def: PlatformDef<_SpacesDef, _ProviderSchema, _ConfigBuilder, _UserSchema>,
+): Platform<PlatformDef<_SpacesDef, _ProviderSchema, _ConfigBuilder, _UserSchema>> {
     return null as any;
 }
 
@@ -73,21 +93,30 @@ const imessage = definePlatform({
     providerSchema: z.object({
         useLocal: z.boolean().default(false),
     }),
-    configBuilder: async (config) => {
-        return config
+    resolveConfig: async (config) => {
+        return {
+            useLocal: config.useLocal,
+        };
     },
-    userBuilder: async ({ config }) => {
-        return config.useLocal ? "local" : "remote"
-    }
+    userSchema: z.object({
+        test: z.object({
+            name: z.string().min(2).max(100),
+        })
+    }),
+    resolveUser: async ({ config }) => {
+        return {
+            id: "ss",
+            test: {
+                name: "John Doe"
+            }
+        };
+    },
 });
 
 const spectrum = new Spectrum({
     projectID: "1",
     projectSecret: "1",
-    providers: [
-        imessage.config({})
-    ]
-})
+    providers: [imessage.config({})],
+});
 
-const imessageSpectrum = imessage(spectrum);
-const user = await imessageSpectrum.user("");
+const user = await imessage(spectrum).user("");
