@@ -1,5 +1,6 @@
 import z from "zod";
 import type { PlatformProviderConfig } from "../platform/type";
+import type { Space } from "./space";
 
 const specturmConfigSchema = z.object({
     projectID: z.string().min(1),
@@ -10,9 +11,13 @@ const specturmConfigSchema = z.object({
 type SpectrumConfig = z.infer<typeof specturmConfigSchema>;
 
 export class Spectrum {
-    readonly config: SpectrumConfig;
+    private readonly config: SpectrumConfig;
     
     constructor(config: SpectrumConfig) {
         this.config = config;
+    }
+    
+    async send(space: Space) {
+        
     }
 }

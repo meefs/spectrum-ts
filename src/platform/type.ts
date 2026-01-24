@@ -1,9 +1,11 @@
 import type { Fn, Objects, Pipe } from "hotscript";
-import z from "zod";
+import type z from "zod";
 import { type Spectrum as BaseSpectrum, Spectrum } from "../core/platform";
+import type { Store } from "../core/store";
 import type { User as BaseUser } from "../core/user";
+import { type Space as BaseSpace } from "../core/space";
 
-const SpaceKind = {
+export const SpaceKind = {
     Direct: "direct",
     Group: "group",
 } as const;
@@ -14,7 +16,7 @@ type SpaceDef = {
     kind: SpaceKindType;
 };
 
-type SpacesDef = Record<string, SpaceDef>;
+export type SpacesDef = Record<string, SpaceDef>;
 
 interface HasSpaceKindType<Kind extends SpaceKindType> extends Fn {
     return: this["arg0"] extends { kind: Kind } ? true : false;
@@ -37,6 +39,7 @@ export type PlatformDef<
     _SpacesDef extends SpacesDef,
     _ConfigSchema extends z.ZodType<object>,
     _UserSchema extends z.ZodType<object>,
+    _SpaceSchema extends z.ZodType<object>
 > = {
     name: string;
     spaces: _SpacesDef;
@@ -45,72 +48,44 @@ export type PlatformDef<
     config: {
         schema: _ConfigSchema;
     };
-    userSchema: _UserSchema;
-    resolveUser: (_: { config: z.infer<_ConfigSchema> }) => Promise<BaseUser & KnownKeys<z.infer<_UserSchema>>>;
+    user: {
+        schema: _UserSchema;
+        resolve: (_: {
+            input: {
+                userID: string;
+            }
+            config: z.infer<_ConfigSchema>;
+            store: Store;
+        }) => Promise<BaseUser & KnownKeys<z.infer<_UserSchema>>>;
+    };
+    space: {
+        schema: _SpaceSchema;
+        resolve: (_: {
+            input: {
+                users: (BaseUser & KnownKeys<z.infer<_UserSchema>>)[]
+            }
+            config: z.infer<_ConfigSchema>;
+            store: Store;
+        }) => Promise<BaseSpace & KnownKeys<z.infer<_SpaceSchema>>>;
+    }
 };
 
-type AnyPlatformDef = PlatformDef<any, any, any>;
+type AnyPlatformDef = PlatformDef<any, any, any, any>;
 
-export type Platform<_PlatformDef extends PlatformDef<any, any, any>> = ((
+export type Platform<_PlatformDef extends PlatformDef<any, any, any, any>> = ((
     spectrum: BaseSpectrum,
 ) => Platform.Spectrum<_PlatformDef>) & {
     config(config: z.input<_PlatformDef["config"]["schema"]>): PlatformProviderConfig;
 };
 
-namespace Platform {
+export namespace Platform {
     export type Spectrum<_PlatformDef extends AnyPlatformDef> = BaseSpectrum & {
         user(userID: string): User<_PlatformDef>;
-    };
+    } & {
+        space(user: User<_PlatformDef>): Space<_PlatformDef>;
+    }
 
-    export type User<_PlatformDef extends AnyPlatformDef> = BaseUser & z.infer<_PlatformDef["userSchema"]>;
+    export type User<_PlatformDef extends AnyPlatformDef> = BaseUser & z.infer<_PlatformDef["user"]["schema"]>;
+    
+    export type Space<_PlatformDef extends AnyPlatformDef> = BaseSpace
 }
-
-export function definePlatform<
-    _SpacesDef extends SpacesDef,
-    _ProviderSchema extends z.ZodType<object>,
-    _UserSchema extends z.ZodType<object>,
->(
-    def: PlatformDef<_SpacesDef, _ProviderSchema, _UserSchema>,
-): Platform<PlatformDef<_SpacesDef, _ProviderSchema, _UserSchema>> {
-    return null as any;
-}
-
-const imessage = definePlatform({
-    name: "iMessage",
-    spaces: {
-        dm: {
-            kind: SpaceKind.Direct,
-        },
-        group: {
-            kind: SpaceKind.Group,
-        },
-    },
-    defaultDirect: "dm",
-    defaultGroup: "group",
-    config: {
-        schema: z.object({
-            useLocal: z.boolean().default(false),
-        }),
-    },
-    userSchema: z.object({
-        test: z.object({
-            name: z.string().min(2).max(100),
-        }),
-    }),
-    resolveUser: async ({ config }) => {
-        return {
-            id: "ss",
-            test: {
-                name: "John Doe",
-            },
-        };
-    },
-});
-
-const spectrum = new Spectrum({
-    projectID: "1",
-    projectSecret: "1",
-    providers: [imessage.config({})],
-});
-
-const user = await imessage(spectrum).user("");
