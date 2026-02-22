@@ -44,7 +44,7 @@ const imessage = definePlatform({
     },
   },
   actions: {
-    send: async ({ space, content }) => {},
+    send: async () => {},
   },
   hooks: {
     afterInit: async ({ config, store, spectrum }) => {

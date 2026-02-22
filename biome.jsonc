@@ -3,6 +3,14 @@
     "extends": [
         "ultracite/biome/core"
     ],
+    "linter": {
+        "rules": {
+            "suspicious": {
+                "useAwait": "off",
+                "noEmptyBlockStatements": "off"
+            }
+        }
+    },
     "files": {
         "includes": [
             "!!bun.lock"
