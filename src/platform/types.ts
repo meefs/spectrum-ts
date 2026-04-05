@@ -1,4 +1,4 @@
-import type { Fn, Objects, Pipe, Tuples } from "hotscript";
+import type { Fn, Pipe, Tuples } from "hotscript";
 import type z from "zod";
 import type { Content } from "../types/content";
 import type { Message } from "../types/message";
@@ -6,34 +6,8 @@ import type { RichSpace, Space } from "../types/space";
 import type { User } from "../types/user";
 
 // ---------------------------------------------------------------------------
-// Space Kind
+// Type-level helpers
 // ---------------------------------------------------------------------------
-
-export const SpaceKind = {
-  Direct: "direct",
-  Group: "group",
-} as const;
-
-type SpaceKindType = (typeof SpaceKind)[keyof typeof SpaceKind];
-
-interface SpaceDef {
-  kind: SpaceKindType;
-}
-
-export type SpacesDef = Record<string, SpaceDef>;
-
-// ---------------------------------------------------------------------------
-// HotScript helpers for space filtering
-// ---------------------------------------------------------------------------
-
-interface HasSpaceKindType<Kind extends SpaceKindType> extends Fn {
-  return: this["arg0"] extends { kind: Kind } ? true : false;
-}
-
-type KeysBySpaceKindType<
-  Spaces extends SpacesDef,
-  Kind extends SpaceKindType,
-> = Pipe<Spaces, [Objects.PickBy<HasSpaceKindType<Kind>>, Objects.Keys]>;
 
 type KnownKeys<T> = {
   [K in keyof T as string extends K
@@ -43,12 +17,12 @@ type KnownKeys<T> = {
       : K]: T[K];
 };
 
-// ---------------------------------------------------------------------------
-// Type-level helpers
-// ---------------------------------------------------------------------------
-
 type SchemaInfer<T> = T extends { schema: infer S extends z.ZodType }
   ? z.infer<S>
+  : Record<string, never>;
+
+type SchemaInput<T> = T extends { schema: infer S extends z.ZodType }
+  ? z.input<S>
   : Record<string, never>;
 
 type EventPayload<F> = F extends (
@@ -64,7 +38,6 @@ type EventPayload<F> = F extends (
 
 export interface PlatformDef<
   _Name extends string = string,
-  _SpacesDef extends SpacesDef = SpacesDef,
   _ConfigSchema extends z.ZodType<object> = z.ZodType<object>,
   _UserSchema extends z.ZodType<object> = z.ZodType<object>,
   _SpaceSchema extends z.ZodType<object> = z.ZodType<object>,
@@ -74,7 +47,7 @@ export interface PlatformDef<
 > {
   actions: {
     send: (_: {
-      space: Space & KnownKeys<z.infer<_SpaceSchema>>;
+      space: Space;
       content: Content[];
       client: _Client;
       config: z.infer<_ConfigSchema>;
@@ -82,8 +55,6 @@ export interface PlatformDef<
   };
 
   config: _ConfigSchema;
-  defaultDirect: KeysBySpaceKindType<_SpacesDef, "direct">;
-  defaultGroup: KeysBySpaceKindType<_SpacesDef, "group">;
 
   events: _Events;
 
@@ -105,12 +76,14 @@ export interface PlatformDef<
   space: {
     schema?: _SpaceSchema;
     resolve: (_: {
-      input: { users: (User & KnownKeys<z.infer<_UserSchema>>)[] };
+      input: {
+        users: (User & KnownKeys<z.infer<_UserSchema>>)[];
+        options: z.infer<_SpaceSchema>;
+      };
       client: _Client;
       config: z.infer<_ConfigSchema>;
-    }) => Promise<Space & KnownKeys<z.infer<_SpaceSchema>>>;
+    }) => Promise<Space>;
   };
-  spaces: _SpacesDef;
 
   user: {
     schema?: _UserSchema;
@@ -132,8 +105,6 @@ export interface AnyPlatformDef {
     send: (_: any) => Promise<void>;
   };
   config: z.ZodType<object>;
-  defaultDirect: string | number | symbol;
-  defaultGroup: string | number | symbol;
   events: object;
   lifecycle: {
     // biome-ignore lint/suspicious/noExplicitAny: wildcard lifecycle
@@ -150,7 +121,6 @@ export interface AnyPlatformDef {
     // biome-ignore lint/suspicious/noExplicitAny: wildcard resolver
     resolve: (_: any) => Promise<any>;
   };
-  spaces: SpacesDef;
   user: {
     schema?: z.ZodType<object>;
     // biome-ignore lint/suspicious/noExplicitAny: wildcard resolver
@@ -238,8 +208,7 @@ export type UnifiedMessage<Providers extends PlatformProviderConfig[]> = Pipe<
 // Platform-specific Space, Message, and User types
 // ---------------------------------------------------------------------------
 
-export type PlatformSpace<Def extends AnyPlatformDef> = RichSpace &
-  KnownKeys<SchemaInfer<Def["space"]>>;
+export type PlatformSpace<_Def extends AnyPlatformDef> = RichSpace;
 
 export type PlatformMessage<Def extends AnyPlatformDef> = Message &
   KnownKeys<SchemaInfer<Def["message"]>> & {
@@ -259,7 +228,10 @@ export interface PlatformInstance<Def extends AnyPlatformDef> {
     event: E,
     handler: (data: EventPayload<Def["events"][E]>) => void | Promise<void>
   ): void;
-  space(...users: PlatformUser<Def>[]): Promise<PlatformSpace<Def>>;
+  space(
+    users: PlatformUser<Def>[],
+    options: SchemaInput<Def["space"]>
+  ): Promise<PlatformSpace<Def>>;
   user(userID: string): Promise<PlatformUser<Def>>;
 }
 

@@ -1,17 +1,15 @@
 // biome-ignore lint/performance/noBarrelFile: library entry point
 export { definePlatform } from "./platform/define";
-export {
-  type AnyPlatformDef,
-  type Platform,
-  type PlatformDef,
-  type PlatformInstance,
-  type PlatformMessage,
-  type PlatformProviderConfig,
-  type PlatformSpace,
-  type PlatformUser,
-  SpaceKind,
-  type SpacesDef,
-  type UnifiedMessage,
+export type {
+  AnyPlatformDef,
+  Platform,
+  PlatformDef,
+  PlatformInstance,
+  PlatformMessage,
+  PlatformProviderConfig,
+  PlatformSpace,
+  PlatformUser,
+  UnifiedMessage,
 } from "./platform/types";
 export { Spectrum, type SpectrumInstance } from "./spectrum";
 export { type Content, text } from "./types/content";

@@ -11,7 +11,6 @@ import type {
   PlatformProviderConfig,
   PlatformSpace,
   PlatformUser,
-  SpacesDef,
   SpectrumLike,
 } from "./types";
 
@@ -36,9 +35,12 @@ function createPlatformInstance<
       } as PlatformUser<Def>;
     },
 
-    async space(...users: PlatformUser<Def>[]) {
+    async space(users: PlatformUser<Def>[], options: unknown) {
+      const parsedOptions = def.space.schema
+        ? def.space.schema.parse(options)
+        : options;
       const resolved = await def.space.resolve({
-        input: { users },
+        input: { users, options: parsedOptions },
         client: runtime.client as _Client,
         config: runtime.config as z.infer<_ConfigSchema>,
       });
@@ -68,7 +70,6 @@ function createPlatformInstance<
 
 export function definePlatform<
   _Name extends string,
-  _SpacesDef extends SpacesDef,
   _ConfigSchema extends z.ZodType<object>,
   _UserSchema extends z.ZodType<object>,
   _SpaceSchema extends z.ZodType<object>,
@@ -78,7 +79,6 @@ export function definePlatform<
 >(
   def: PlatformDef<
     _Name,
-    _SpacesDef,
     _ConfigSchema,
     _UserSchema,
     _SpaceSchema,
@@ -89,7 +89,6 @@ export function definePlatform<
 ): Platform<
   PlatformDef<
     _Name,
-    _SpacesDef,
     _ConfigSchema,
     _UserSchema,
     _SpaceSchema,
@@ -100,7 +99,6 @@ export function definePlatform<
 > {
   type Def = PlatformDef<
     _Name,
-    _SpacesDef,
     _ConfigSchema,
     _UserSchema,
     _SpaceSchema,

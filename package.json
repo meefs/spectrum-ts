@@ -13,8 +13,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@photon-ai/advanced-imessage-kit": "^1.11.2",
-    "@photon-ai/imessage-kit": "^2.1.2",
+    "@photon-ai/advanced-imessage": "^0.1.0",
     "better-grpc": "^0.3.2",
     "type-fest": "^5.4.1",
     "zod": "^4.2.1"
