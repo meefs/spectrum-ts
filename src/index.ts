@@ -15,6 +15,6 @@ export {
 } from "./platform/types";
 export { Spectrum, type SpectrumInstance } from "./spectrum";
 export { type Content, text } from "./types/content";
-export type { GenericMessage } from "./types/message";
+export type { Message } from "./types/message";
 export type { RichSpace, Space } from "./types/space";
 export type { User } from "./types/user";

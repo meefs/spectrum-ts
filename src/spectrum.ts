@@ -1,13 +1,13 @@
 import z from "zod";
 import type {
   AnyPlatformDef,
-  GenericMessage,
   PlatformProviderConfig,
   SpectrumLike,
   UnifiedMessage,
 } from "./platform/types";
 import { createMessageStream } from "./stream";
 import type { Content } from "./types/content";
+import type { Message as BaseMessage } from "./types/message";
 import type { RichSpace } from "./types/space";
 
 // ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
     for (const provider of options.providers) {
       const providerConfig = provider as PlatformProviderConfig;
       const def = providerConfig.__definition;
-      const userConfig = def.config.schema.parse(providerConfig.config);
+      const userConfig = def.config.parse(providerConfig.config);
 
       const client = await def.lifecycle.createClient({
         config: userConfig,
@@ -85,7 +85,7 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
         client,
         config: userConfig,
         push: (rawMsg: unknown) => {
-          const msg = rawMsg as GenericMessage;
+          const msg = rawMsg as BaseMessage;
           const richSpace: RichSpace = {
             id: msg.sender.id,
             __platform: def.name,

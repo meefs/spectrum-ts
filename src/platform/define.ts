@@ -1,6 +1,6 @@
 import type z from "zod";
 import type { Content } from "../types/content";
-import type { GenericMessage } from "../types/message";
+import type { Message } from "../types/message";
 import type { RichSpace } from "../types/space";
 import type {
   AnyPlatformDef,
@@ -57,22 +57,17 @@ function createPlatformInstance<
     },
 
     on(event, handler) {
-      const emitter = runtime as {
-        emitter?: {
-          on: (e: string, h: (...args: unknown[]) => void) => void;
-        };
-      };
-      if (emitter.emitter) {
-        emitter.emitter.on(
-          event as string,
-          handler as (...args: unknown[]) => void
-        );
+      // biome-ignore lint/complexity/noBannedTypes: event subscription functions have dynamic signatures
+      const eventFn = (def.events as Record<string, Function>)[event as string];
+      if (eventFn) {
+        eventFn(runtime.client, handler);
       }
     },
   };
 }
 
 export function definePlatform<
+  _Name extends string,
   _SpacesDef extends SpacesDef,
   _ConfigSchema extends z.ZodType<object>,
   _UserSchema extends z.ZodType<object>,
@@ -80,39 +75,38 @@ export function definePlatform<
   _Client,
   _Events extends object,
   _MessageType,
-  _SpaceMethods extends object,
 >(
   def: PlatformDef<
+    _Name,
     _SpacesDef,
     _ConfigSchema,
     _UserSchema,
     _SpaceSchema,
     _Client,
     _Events,
-    _MessageType,
-    _SpaceMethods
+    _MessageType
   >
 ): Platform<
   PlatformDef<
+    _Name,
     _SpacesDef,
     _ConfigSchema,
     _UserSchema,
     _SpaceSchema,
     _Client,
     _Events,
-    _MessageType,
-    _SpaceMethods
+    _MessageType
   >
 > {
   type Def = PlatformDef<
+    _Name,
     _SpacesDef,
     _ConfigSchema,
     _UserSchema,
     _SpaceSchema,
     _Client,
     _Events,
-    _MessageType,
-    _SpaceMethods
+    _MessageType
   >;
 
   const platformCache = new WeakMap<SpectrumLike, PlatformInstance<Def>>();
@@ -145,7 +139,7 @@ export function definePlatform<
     return input as PlatformSpace<Def>;
   };
 
-  const narrowMessage = (input: GenericMessage) => {
+  const narrowMessage = (input: Message) => {
     if (input.platform !== def.name) {
       throw new Error(
         `Expected message from "${def.name}", got "${input.platform}"`
@@ -154,7 +148,7 @@ export function definePlatform<
     return input as PlatformMessage<Def>;
   };
 
-  const narrower = ((input: SpectrumLike | RichSpace | GenericMessage) => {
+  const narrower = ((input: SpectrumLike | RichSpace | Message) => {
     if ("__providers" in input && "__internal" in input) {
       return narrowSpectrum(input as SpectrumLike);
     }
@@ -162,7 +156,7 @@ export function definePlatform<
       return narrowSpace(input as RichSpace);
     }
     if ("platform" in input && "raw" in input) {
-      return narrowMessage(input as GenericMessage);
+      return narrowMessage(input as Message);
     }
     throw new Error("Invalid input to platform narrowing function");
   }) as Platform<Def>;

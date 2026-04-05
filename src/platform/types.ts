@@ -1,7 +1,7 @@
 import type { Fn, Objects, Pipe, Tuples } from "hotscript";
 import type z from "zod";
 import type { Content } from "../types/content";
-import type { GenericMessage } from "../types/message";
+import type { Message } from "../types/message";
 import type { RichSpace, Space } from "../types/space";
 import type { User } from "../types/user";
 
@@ -44,10 +44,26 @@ type KnownKeys<T> = {
 };
 
 // ---------------------------------------------------------------------------
+// Type-level helpers
+// ---------------------------------------------------------------------------
+
+type SchemaInfer<T> = T extends { schema: infer S extends z.ZodType }
+  ? z.infer<S>
+  : Record<string, never>;
+
+type EventPayload<F> = F extends (
+  client: never,
+  handler: (data: infer D) => void
+) => unknown
+  ? D
+  : never;
+
+// ---------------------------------------------------------------------------
 // PlatformDef — the full definition of a platform adapter
 // ---------------------------------------------------------------------------
 
 export interface PlatformDef<
+  _Name extends string = string,
   _SpacesDef extends SpacesDef = SpacesDef,
   _ConfigSchema extends z.ZodType<object> = z.ZodType<object>,
   _UserSchema extends z.ZodType<object> = z.ZodType<object>,
@@ -55,7 +71,6 @@ export interface PlatformDef<
   _Client = unknown,
   _Events extends object = object,
   _MessageType = unknown,
-  _SpaceMethods extends object = object,
 > {
   actions: {
     send: (_: {
@@ -66,9 +81,7 @@ export interface PlatformDef<
     }) => Promise<void>;
   };
 
-  config: {
-    schema: _ConfigSchema;
-  };
+  config: _ConfigSchema;
   defaultDirect: KeysBySpaceKindType<_SpacesDef, "direct">;
   defaultGroup: KeysBySpaceKindType<_SpacesDef, "group">;
 
@@ -76,31 +89,31 @@ export interface PlatformDef<
 
   lifecycle: {
     createClient: (ctx: { config: z.infer<_ConfigSchema> }) => Promise<_Client>;
-
     destroyClient: (ctx: { client: _Client }) => Promise<void>;
-
     listen: (ctx: {
       client: _Client;
       config: z.infer<_ConfigSchema>;
       push: (msg: _MessageType) => void;
     }) => Promise<void>;
   };
-  messageType?: _MessageType;
-  name: string;
+
+  message?: {
+    schema?: z.ZodType<object>;
+  };
+  name: _Name;
 
   space: {
-    schema: _SpaceSchema;
+    schema?: _SpaceSchema;
     resolve: (_: {
       input: { users: (User & KnownKeys<z.infer<_UserSchema>>)[] };
       client: _Client;
       config: z.infer<_ConfigSchema>;
     }) => Promise<Space & KnownKeys<z.infer<_SpaceSchema>>>;
   };
-  spaceMethods?: _SpaceMethods;
   spaces: _SpacesDef;
 
   user: {
-    schema: _UserSchema;
+    schema?: _UserSchema;
     resolve: (_: {
       input: { userID: string };
       client: _Client;
@@ -109,12 +122,16 @@ export interface PlatformDef<
   };
 }
 
+// ---------------------------------------------------------------------------
+// AnyPlatformDef — structural wildcard for erasure contexts
+// ---------------------------------------------------------------------------
+
 export interface AnyPlatformDef {
   actions: {
     // biome-ignore lint/suspicious/noExplicitAny: wildcard action
     send: (_: any) => Promise<void>;
   };
-  config: { schema: z.ZodType<object> };
+  config: z.ZodType<object>;
   defaultDirect: string | number | symbol;
   defaultGroup: string | number | symbol;
   events: object;
@@ -126,17 +143,16 @@ export interface AnyPlatformDef {
     // biome-ignore lint/suspicious/noExplicitAny: wildcard lifecycle
     listen: (ctx: any) => Promise<void>;
   };
-  messageType?: unknown;
+  message?: { schema?: z.ZodType<object> };
   name: string;
   space: {
-    schema: z.ZodType<object>;
+    schema?: z.ZodType<object>;
     // biome-ignore lint/suspicious/noExplicitAny: wildcard resolver
     resolve: (_: any) => Promise<any>;
   };
-  spaceMethods?: object;
   spaces: SpacesDef;
   user: {
-    schema: z.ZodType<object>;
+    schema?: z.ZodType<object>;
     // biome-ignore lint/suspicious/noExplicitAny: wildcard resolver
     resolve: (_: any) => Promise<any>;
   };
@@ -177,8 +193,8 @@ interface ToMessageVariant extends Fn {
     ? {
         platform: Def["name"];
         content: Content[];
-        sender: User & KnownKeys<z.infer<Def["user"]["schema"]>>;
-        raw: Def["messageType"];
+        sender: User & KnownKeys<SchemaInfer<Def["user"]>>;
+        raw: unknown;
         timestamp: Date;
       }
     : never;
@@ -219,34 +235,29 @@ export type UnifiedMessage<Providers extends PlatformProviderConfig[]> = Pipe<
 >;
 
 // ---------------------------------------------------------------------------
-// Platform-specific Space and Message types
+// Platform-specific Space, Message, and User types
 // ---------------------------------------------------------------------------
 
 export type PlatformSpace<Def extends AnyPlatformDef> = RichSpace &
-  KnownKeys<z.infer<Def["space"]["schema"]>> &
-  (Def["spaceMethods"] extends object
-    ? KnownKeys<Def["spaceMethods"]>
-    : unknown);
+  KnownKeys<SchemaInfer<Def["space"]>>;
 
-export interface PlatformMessage<Def extends AnyPlatformDef> {
-  content: Content[];
-  platform: Def["name"];
-  raw: Def["messageType"];
-  sender: User & KnownKeys<z.infer<Def["user"]["schema"]>>;
-  timestamp: Date;
-}
+export type PlatformMessage<Def extends AnyPlatformDef> = Message &
+  KnownKeys<SchemaInfer<Def["message"]>> & {
+    platform: Def["name"];
+    sender: User & KnownKeys<SchemaInfer<Def["user"]>>;
+  };
 
 export type PlatformUser<Def extends AnyPlatformDef> = User &
-  KnownKeys<z.infer<Def["user"]["schema"]>>;
+  KnownKeys<SchemaInfer<Def["user"]>>;
 
 // ---------------------------------------------------------------------------
 // PlatformInstance — returned from imessage(spectrum)
 // ---------------------------------------------------------------------------
 
 export interface PlatformInstance<Def extends AnyPlatformDef> {
-  on<E extends keyof Def["events"]>(
+  on<E extends string & keyof Def["events"]>(
     event: E,
-    handler: (data: Def["events"][E]) => void | Promise<void>
+    handler: (data: EventPayload<Def["events"][E]>) => void | Promise<void>
   ): void;
   space(...users: PlatformUser<Def>[]): Promise<PlatformSpace<Def>>;
   user(userID: string): Promise<PlatformUser<Def>>;
@@ -273,7 +284,7 @@ export interface SpectrumLike<
 // ---------------------------------------------------------------------------
 
 export interface Platform<Def extends AnyPlatformDef> {
-  config(config: z.input<Def["config"]["schema"]>): PlatformProviderConfig<Def>;
+  config(config: z.input<Def["config"]>): PlatformProviderConfig<Def>;
   <Providers extends PlatformProviderConfig[]>(
     spectrum: SpectrumLike<Providers>
   ): HasProvider<Providers, Def["name"]> extends true
@@ -282,7 +293,7 @@ export interface Platform<Def extends AnyPlatformDef> {
 
   (space: RichSpace): PlatformSpace<Def>;
 
-  (message: GenericMessage): PlatformMessage<Def>;
+  (message: Message): PlatformMessage<Def>;
 }
 
-export type { GenericMessage } from "../types/message";
+export type { Message } from "../types/message";
