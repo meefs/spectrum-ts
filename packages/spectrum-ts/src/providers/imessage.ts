@@ -15,8 +15,6 @@ export const imessage = definePlatform({
     local: z.boolean().default(false),
   }),
 
-  events: {},
-
   lifecycle: {
     createClient: async ({ config }) => {
       if (config.local) {
@@ -32,11 +30,13 @@ export const imessage = definePlatform({
     destroyClient: async ({ client }) => {
       await client.close();
     },
+  },
 
-    listen: async ({ client, push }) => {
+  events: {
+    async *messages({ client }) {
       const stream = client.messages.subscribe("message.received");
       for await (const event of stream) {
-        push(event);
+        yield event;
       }
     },
   },

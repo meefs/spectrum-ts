@@ -56,3 +56,24 @@ export function createMessageStream<T>(): MessageStream<T> {
 
   return { push, stream, close };
 }
+
+export function fromEmitter<T>(
+  setup: (emit: (value: T) => void) => (() => void) | undefined
+): AsyncIterable<T> {
+  const { push, stream, close } = createMessageStream<T>();
+  const cleanup = setup(push);
+
+  return {
+    [Symbol.asyncIterator]() {
+      const iter = stream[Symbol.asyncIterator]();
+      return {
+        next: () => iter.next(),
+        return(): Promise<IteratorResult<T>> {
+          cleanup?.();
+          close();
+          return Promise.resolve({ value: undefined as T, done: true });
+        },
+      };
+    },
+  };
+}

@@ -22,7 +22,7 @@ function createPlatformInstance<
   def: Def,
   runtime: { client: unknown; config: unknown }
 ): PlatformInstance<Def> {
-  return {
+  const base = {
     async user(userID: string) {
       const resolved = await def.user.resolve({
         input: { userID },
@@ -57,15 +57,26 @@ function createPlatformInstance<
         },
       } as PlatformSpace<Def>;
     },
-
-    on(event, handler) {
-      // biome-ignore lint/complexity/noBannedTypes: event subscription functions have dynamic signatures
-      const eventFn = (def.events as Record<string, Function>)[event as string];
-      if (eventFn) {
-        eventFn(runtime.client, handler);
-      }
-    },
   };
+
+  // Add flat event properties for custom events (non-messages)
+  const eventProperties: Record<string, AsyncIterable<unknown>> = {};
+  for (const eventName of Object.keys(def.events)) {
+    if (eventName === "messages") {
+      continue;
+    }
+    const producer = def.events[eventName] as
+      | ((ctx: { client: unknown; config: unknown }) => AsyncIterable<unknown>)
+      | undefined;
+    if (producer) {
+      eventProperties[eventName] = producer({
+        client: runtime.client,
+        config: runtime.config,
+      });
+    }
+  }
+
+  return Object.assign(base, eventProperties) as PlatformInstance<Def>;
 }
 
 export function definePlatform<
@@ -74,8 +85,13 @@ export function definePlatform<
   _UserSchema extends z.ZodType<object>,
   _SpaceSchema extends z.ZodType<object>,
   _Client,
-  _Events extends object,
   _MessageType,
+  _Events extends {
+    messages: (ctx: {
+      client: _Client;
+      config: z.infer<_ConfigSchema>;
+    }) => AsyncIterable<_MessageType>;
+  },
 >(
   def: PlatformDef<
     _Name,
@@ -83,8 +99,8 @@ export function definePlatform<
     _UserSchema,
     _SpaceSchema,
     _Client,
-    _Events,
-    _MessageType
+    _MessageType,
+    _Events
   >
 ): Platform<
   PlatformDef<
@@ -93,8 +109,8 @@ export function definePlatform<
     _UserSchema,
     _SpaceSchema,
     _Client,
-    _Events,
-    _MessageType
+    _MessageType,
+    _Events
   >
 > {
   type Def = PlatformDef<
@@ -103,8 +119,8 @@ export function definePlatform<
     _UserSchema,
     _SpaceSchema,
     _Client,
-    _Events,
-    _MessageType
+    _MessageType,
+    _Events
   >;
 
   const platformCache = new WeakMap<SpectrumLike, PlatformInstance<Def>>();

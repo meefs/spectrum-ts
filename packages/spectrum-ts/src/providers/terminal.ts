@@ -7,8 +7,6 @@ export const terminal = definePlatform({
 
   config: z.object({}),
 
-  events: {},
-
   lifecycle: {
     createClient: async () => {
       return createInterface({
@@ -20,16 +18,18 @@ export const terminal = definePlatform({
     destroyClient: async ({ client }) => {
       client.close();
     },
+  },
 
-    listen: async ({ client, push }) => {
+  events: {
+    async *messages({ client }) {
       for await (const line of client) {
-        push({
+        yield {
           content: [{ type: "plain_text" as const, text: line }],
           platform: "terminal",
           raw: line,
           sender: { id: "terminal-user", __platform: "terminal" as const },
           timestamp: new Date(),
-        });
+        };
       }
     },
   },

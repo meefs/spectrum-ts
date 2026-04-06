@@ -25,12 +25,25 @@ type SchemaInput<T> = T extends { schema: infer S extends z.ZodType }
   ? z.input<S>
   : Record<string, never>;
 
-type EventPayload<F> = F extends (
-  client: never,
-  handler: (data: infer D) => void
-) => unknown
-  ? D
+// ---------------------------------------------------------------------------
+// Event system types
+// ---------------------------------------------------------------------------
+
+export type EventProducer<
+  TPayload = unknown,
+  TClient = unknown,
+  TConfig = unknown,
+> = (ctx: { client: TClient; config: TConfig }) => AsyncIterable<TPayload>;
+
+type InferEventPayload<T> = T extends (ctx: never) => AsyncIterable<infer P>
+  ? P
   : never;
+
+// ---------------------------------------------------------------------------
+// Reserved names — event names that would collide with SpectrumInstance methods
+// ---------------------------------------------------------------------------
+
+type ReservedNames = "start" | "stop" | "send" | "__internal" | "__providers";
 
 // ---------------------------------------------------------------------------
 // PlatformDef — the full definition of a platform adapter
@@ -42,8 +55,12 @@ export interface PlatformDef<
   _UserSchema extends z.ZodType<object> = z.ZodType<object>,
   _SpaceSchema extends z.ZodType<object> = z.ZodType<object>,
   _Client = unknown,
-  _Events extends object = object,
   _MessageType = unknown,
+  _Events extends {
+    messages: EventProducer<_MessageType, _Client, z.infer<_ConfigSchema>>;
+  } = {
+    messages: EventProducer<_MessageType, _Client, z.infer<_ConfigSchema>>;
+  },
 > {
   actions: {
     send: (_: {
@@ -61,11 +78,6 @@ export interface PlatformDef<
   lifecycle: {
     createClient: (ctx: { config: z.infer<_ConfigSchema> }) => Promise<_Client>;
     destroyClient: (ctx: { client: _Client }) => Promise<void>;
-    listen: (ctx: {
-      client: _Client;
-      config: z.infer<_ConfigSchema>;
-      push: (msg: _MessageType) => void;
-    }) => Promise<void>;
   };
 
   message?: {
@@ -105,14 +117,17 @@ export interface AnyPlatformDef {
     send: (_: any) => Promise<void>;
   };
   config: z.ZodType<object>;
-  events: object;
+  events: {
+    // biome-ignore lint/suspicious/noExplicitAny: wildcard event
+    messages: (ctx: any) => AsyncIterable<any>;
+    // biome-ignore lint/suspicious/noExplicitAny: wildcard event
+    [key: string]: (ctx: any) => AsyncIterable<any>;
+  };
   lifecycle: {
     // biome-ignore lint/suspicious/noExplicitAny: wildcard lifecycle
     createClient: (ctx: any) => Promise<any>;
     // biome-ignore lint/suspicious/noExplicitAny: wildcard lifecycle
     destroyClient: (ctx: any) => Promise<void>;
-    // biome-ignore lint/suspicious/noExplicitAny: wildcard lifecycle
-    listen: (ctx: any) => Promise<void>;
   };
   message?: { schema?: z.ZodType<object> };
   name: string;
@@ -175,6 +190,24 @@ interface ExtractDefByName<Name extends string> extends Fn {
 }
 
 // ---------------------------------------------------------------------------
+// HotScript Fn's for custom event operations
+// ---------------------------------------------------------------------------
+
+interface ExtractCustomEventNames extends Fn {
+  return: this["arg0"] extends AnyPlatformDef
+    ? Exclude<keyof this["arg0"]["events"], "messages" | symbol | number>
+    : never;
+}
+
+interface ToCustomEventVariant<EventName extends string> extends Fn {
+  return: this["arg0"] extends PlatformProviderConfig<infer Def>
+    ? EventName extends keyof Def["events"]
+      ? InferEventPayload<Def["events"][EventName]> & { platform: Def["name"] }
+      : never
+    : never;
+}
+
+// ---------------------------------------------------------------------------
 // HasProvider — check if a platform name exists in providers tuple
 // ---------------------------------------------------------------------------
 
@@ -205,6 +238,36 @@ export type UnifiedMessage<Providers extends PlatformProviderConfig[]> = Pipe<
 >;
 
 // ---------------------------------------------------------------------------
+// AllCustomEventNames — union of all non-messages event names across providers
+// ---------------------------------------------------------------------------
+
+type AllCustomEventNames<Providers extends PlatformProviderConfig[]> = Pipe<
+  Providers,
+  [Tuples.Map<ExtractDef>, Tuples.Map<ExtractCustomEventNames>, Tuples.ToUnion]
+>;
+
+// ---------------------------------------------------------------------------
+// UnifiedCustomEvent — for a given event name, union of payloads across providers
+// ---------------------------------------------------------------------------
+
+type UnifiedCustomEvent<
+  Providers extends PlatformProviderConfig[],
+  EventName extends string,
+> = Pipe<
+  Providers,
+  [Tuples.Map<ToCustomEventVariant<EventName>>, Tuples.ToUnion]
+>;
+
+// ---------------------------------------------------------------------------
+// CustomEventStreams — mapped type producing async iterables for each custom event
+// ---------------------------------------------------------------------------
+
+export type CustomEventStreams<Providers extends PlatformProviderConfig[]> = {
+  [K in Exclude<AllCustomEventNames<Providers>, ReservedNames> &
+    string]: AsyncIterable<UnifiedCustomEvent<Providers, K>>;
+};
+
+// ---------------------------------------------------------------------------
 // Platform-specific Space, Message, and User types
 // ---------------------------------------------------------------------------
 
@@ -223,17 +286,20 @@ export type PlatformUser<Def extends AnyPlatformDef> = User &
 // PlatformInstance — returned from imessage(spectrum)
 // ---------------------------------------------------------------------------
 
-export interface PlatformInstance<Def extends AnyPlatformDef> {
-  on<E extends string & keyof Def["events"]>(
-    event: E,
-    handler: (data: EventPayload<Def["events"][E]>) => void | Promise<void>
-  ): void;
+export type PlatformInstance<Def extends AnyPlatformDef> = {
   space(
     users: PlatformUser<Def>[],
     options: SchemaInput<Def["space"]>
   ): Promise<PlatformSpace<Def>>;
   user(userID: string): Promise<PlatformUser<Def>>;
-}
+} & {
+  [K in Exclude<
+    keyof Def["events"],
+    "messages" | symbol | number
+  > as K extends ReservedNames ? never : K]: AsyncIterable<
+    InferEventPayload<Def["events"][K]>
+  >;
+};
 
 // ---------------------------------------------------------------------------
 // SpectrumLike — minimal interface for platform narrowing
