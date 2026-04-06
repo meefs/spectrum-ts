@@ -15,12 +15,12 @@ type IMessageClient = IMessageSDK | AdvancedIMessage[];
 export const imessage = definePlatform({
   name: "iMessage",
 
-  config: z.discriminatedUnion("local", [
+  config: z.union([
     z.object({
       local: z.literal(true),
     }),
     z.object({
-      local: z.literal(false).default(false),
+      local: z.boolean().optional().default(false),
       clients: z
         .union([
           z.object({ address: z.string(), token: z.string() }),
@@ -39,7 +39,11 @@ export const imessage = definePlatform({
       const raw = config.clients ?? [];
       const entries = Array.isArray(raw) ? raw : [raw];
       return entries.map((entry) =>
-        createClient({ address: entry.address, token: entry.token })
+        createClient({
+          address: entry.address,
+          tls: true,
+          token: entry.token,
+        })
       );
     },
 
@@ -93,9 +97,11 @@ export const imessage = definePlatform({
         sender: { id: string; __platform: "iMessage" };
         timestamp: Date;
       }>();
+      const streams = client.map((remote) =>
+        remote.messages.subscribe("message.received")
+      );
 
-      for (const remote of client) {
-        const stream = remote.messages.subscribe("message.received");
+      for (const stream of streams) {
         (async () => {
           for await (const event of stream) {
             const msg = event.message;
@@ -110,10 +116,43 @@ export const imessage = definePlatform({
               timestamp: event.timestamp,
             });
           }
-        })();
+        })().catch(() => {
+          // Subscription stream errored — close merged channel gracefully
+          merged.close();
+        });
       }
 
-      return merged.iterable;
+      return {
+        [Symbol.asyncIterator]() {
+          const iterator = merged.iterable[Symbol.asyncIterator]();
+          let closed = false;
+
+          const cleanup = async () => {
+            if (closed) {
+              return;
+            }
+            closed = true;
+            merged.close();
+            await Promise.allSettled(streams.map((stream) => stream.close()));
+          };
+
+          return {
+            next: () => iterator.next(),
+            return: async (): Promise<
+              IteratorResult<{
+                content: { type: "plain_text"; text: string }[];
+                platform: "iMessage";
+                raw: unknown;
+                sender: { id: string; __platform: "iMessage" };
+                timestamp: Date;
+              }>
+            > => {
+              await cleanup();
+              return { value: undefined, done: true };
+            },
+          };
+        },
+      };
     },
   },
 

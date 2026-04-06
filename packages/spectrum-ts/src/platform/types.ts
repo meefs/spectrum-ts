@@ -17,11 +17,11 @@ type KnownKeys<T> = {
       : K]: T[K];
 };
 
-type SchemaInfer<T> = T extends { schema: infer S extends z.ZodType }
+type SchemaInfer<T> = T extends { schema?: infer S extends z.ZodType }
   ? z.infer<S>
   : Record<string, never>;
 
-type SchemaInput<T> = T extends { schema: infer S extends z.ZodType }
+type SchemaInput<T> = T extends { schema?: infer S extends z.ZodType }
   ? z.input<S>
   : Record<string, never>;
 
