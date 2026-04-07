@@ -20,5 +20,7 @@ for await (const [space, message] of app.messages) {
     .map((c) => c.text)
     .join(" ");
 
+  console.log(imessage(space).type);
+
   await space.send(text(`echo: ${incoming}`));
 }

@@ -18,7 +18,7 @@ interface IMessageMessage {
   platform: "iMessage";
   raw: unknown;
   sender: { id: string; __platform: "iMessage" };
-  spaceId?: string;
+  space: { id: string; __platform: "iMessage"; type: "dm" | "group" };
   timestamp: Date;
 }
 
@@ -30,7 +30,11 @@ const toIMessageMessage = (event: RemoteMessageEvent): IMessageMessage => ({
     id: event.message.sender?.address ?? "",
     __platform: "iMessage",
   },
-  spaceId: event.chatGuid,
+  space: {
+    id: event.chatGuid,
+    __platform: "iMessage",
+    type: event.chatGuid.includes(";+;") ? "group" : "dm",
+  },
   timestamp: event.timestamp,
 });
 
@@ -47,6 +51,11 @@ const createLocalMessageStream = (
           sender: {
             id: msg.sender ?? "",
             __platform: "iMessage",
+          },
+          space: {
+            id: msg.sender ?? "",
+            __platform: "iMessage",
+            type: "dm",
           },
           timestamp: msg.date ?? new Date(),
         });

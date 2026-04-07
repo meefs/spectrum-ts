@@ -26,6 +26,7 @@ export const terminal = definePlatform("terminal", {
           platform: "terminal",
           raw: line,
           sender: { id: "terminal-user", __platform: "terminal" as const },
+          space: { id: "terminal", __platform: "terminal" as const },
           timestamp: new Date(),
         };
       }

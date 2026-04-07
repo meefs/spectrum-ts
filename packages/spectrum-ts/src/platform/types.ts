@@ -252,7 +252,8 @@ export type CustomEventStreams<Providers extends PlatformProviderConfig[]> = {
 // Platform-specific Space, Message, and User types
 // ---------------------------------------------------------------------------
 
-export type PlatformSpace<_Def extends AnyPlatformDef> = Space<_Def>;
+export type PlatformSpace<_Def extends AnyPlatformDef> = Space<_Def> &
+  KnownKeys<SchemaInfer<_Def["space"]>>;
 
 export type PlatformMessage<_Def extends AnyPlatformDef> = Message<_Def>;
 

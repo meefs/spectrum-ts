@@ -106,34 +106,27 @@ export async function Spectrum<
     definition: AnyPlatformDef;
   }): ManagedStream<[Space, Message]> => {
     const { client, config, definition } = state;
-    const providerMessages = definition.events.messages({
+    const raw = definition.events.messages({
       client,
       config,
     }) as AsyncIterable<Message>;
 
-    const normalizeMessages = async function* (): AsyncIterable<
-      [Space, Message]
-    > {
-      for await (const msg of providerMessages) {
-        const spaceId = msg.spaceId ?? msg.sender.id;
-        const resolvedSpace: Space = {
-          id: spaceId,
-          __platform: definition.name,
-          send: async (...content: [Content, ...Content[]]) => {
-            await definition.actions.send({
-              space: { id: spaceId, __platform: definition.name },
-              content,
-              client,
-              config,
-            });
-          },
+    const bindSend = async function* (): AsyncIterable<[Space, Message]> {
+      for await (const msg of raw) {
+        const ref = { id: msg.space.id, __platform: msg.space.__platform };
+        msg.space.send = async (...content: [Content, ...Content[]]) => {
+          await definition.actions.send({
+            space: ref,
+            content,
+            client,
+            config,
+          });
         };
-
-        yield [resolvedSpace, msg as Message];
+        yield [msg.space, msg];
       }
     };
 
-    return adaptIterable(normalizeMessages());
+    return adaptIterable(bindSend());
   };
 
   const createMessagesStream = (): ManagedStream<[Space, Message]> => {
