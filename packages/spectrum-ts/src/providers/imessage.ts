@@ -9,11 +9,7 @@ import {
 import { IMessageSDK } from "@photon-ai/imessage-kit";
 import z from "zod";
 import { definePlatform } from "../platform/define";
-import {
-  type ClosableAsyncIterable,
-  fromEmitter,
-  mergeClosableIterables,
-} from "../utils/stream";
+import { mergeStreams, stream } from "../utils/stream";
 
 type IMessageClient = IMessageSDK | AdvancedIMessage[];
 type RemoteMessageEvent = Extract<MessageEvent, { type: "message.received" }>;
@@ -86,7 +82,7 @@ export const imessage = definePlatform({
   events: {
     messages({ client }) {
       if (client instanceof IMessageSDK) {
-        return fromEmitter<IMessageMessage>((emit) => {
+        return stream<IMessageMessage>((emit) => {
           client.startWatching({
             onMessage: (msg) => {
               emit({
@@ -107,13 +103,30 @@ export const imessage = definePlatform({
         });
       }
 
-      const streams: ClosableAsyncIterable<RemoteMessageEvent>[] = client.map(
-        (remote) => remote.messages.subscribe("message.received")
+      const remoteStreams = client.map((remote) =>
+        stream<RemoteMessageEvent>((emit, end) => {
+          const subscription = remote.messages.subscribe("message.received");
+
+          (async () => {
+            try {
+              for await (const event of subscription) {
+                emit(event);
+              }
+              end();
+            } catch (error) {
+              end(error);
+            }
+          })();
+
+          return async () => {
+            await subscription.close();
+          };
+        })
       );
 
       return {
         async *[Symbol.asyncIterator]() {
-          for await (const event of mergeClosableIterables(streams)) {
+          for await (const event of mergeStreams(remoteStreams)) {
             yield toIMessageMessage(event);
           }
         },

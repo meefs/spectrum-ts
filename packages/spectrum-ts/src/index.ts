@@ -17,4 +17,4 @@ export { type Content, text } from "./types/content";
 export type { Message } from "./types/message";
 export type { RichSpace, Space } from "./types/space";
 export type { User } from "./types/user";
-export { fromEmitter } from "./utils/stream";
+export { type ManagedStream, mergeStreams, stream } from "./utils/stream";

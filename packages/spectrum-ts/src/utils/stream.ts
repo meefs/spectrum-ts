@@ -6,8 +6,8 @@ export interface Channel<T> {
   push(value: T): void;
 }
 
-export interface ClosableAsyncIterable<T> extends AsyncIterable<T> {
-  close(): Promise<void> | void;
+export interface ManagedStream<T> extends AsyncIterable<T> {
+  close(): Promise<void>;
 }
 
 export function channel<T>(): Channel<T> {
@@ -63,62 +63,68 @@ export function channel<T>(): Channel<T> {
   return { push, iterable, close };
 }
 
-export function fromEmitter<T>(
-  setup: (emit: (value: T) => void) => (() => void) | undefined
-): AsyncIterable<T> {
-  const { push, iterable, close } = channel<T>();
-  const cleanup = setup(push);
+type StreamCleanup = void | (() => void | Promise<void>);
 
-  return {
-    [Symbol.asyncIterator]() {
-      const iter = iterable[Symbol.asyncIterator]();
-      return {
-        next: () => iter.next(),
-        return(): Promise<IteratorResult<T>> {
-          cleanup?.();
-          close();
-          return Promise.resolve({ value: undefined as T, done: true });
-        },
-      };
-    },
-  };
-}
-
-export function mergeClosableIterables<T>(
-  streams: readonly ClosableAsyncIterable<T>[]
-): AsyncIterable<T> {
-  return new Repeater<T>(async (push, stop) => {
-    if (streams.length === 0) {
-      stop();
-      return;
-    }
-
-    let openStreams = streams.length;
-
-    const workers = streams.map((stream) =>
-      (async () => {
-        try {
-          for await (const value of stream) {
-            await push(value);
-          }
-        } catch (error) {
-          stop(error);
-        } finally {
-          openStreams -= 1;
-          if (openStreams === 0) {
-            stop();
-          }
-        }
-      })()
-    );
+export function stream<T>(
+  setup: (
+    emit: (value: T) => void,
+    end: (error?: unknown) => void
+  ) => StreamCleanup | Promise<StreamCleanup>
+): ManagedStream<T> {
+  const repeater = new Repeater<T>(async (push, stop) => {
+    const emit = (value: T) => {
+      Promise.resolve(push(value)).catch((error) => {
+        stop(error);
+        return undefined;
+      });
+    };
+    const end = (error?: unknown) => {
+      stop(error);
+    };
+    const cleanup = await setup(emit, end);
 
     try {
       await stop;
     } finally {
-      await Promise.allSettled(
-        streams.map((stream) => Promise.resolve(stream.close()))
-      );
-      await Promise.allSettled(workers);
+      await cleanup?.();
     }
+  });
+
+  return Object.assign(repeater, {
+    close: async () => {
+      await repeater.return(undefined);
+    },
+  });
+}
+
+export function mergeStreams<T>(
+  streams: readonly ManagedStream<T>[]
+): ManagedStream<T> {
+  return stream<T>((emit, end) => {
+    if (streams.length === 0) {
+      end();
+      return;
+    }
+
+    let openStreams = streams.length;
+    const workers = streams.map(async (source) => {
+      try {
+        for await (const value of source) {
+          emit(value);
+        }
+      } catch (error) {
+        end(error);
+      } finally {
+        openStreams -= 1;
+        if (openStreams === 0) {
+          end();
+        }
+      }
+    });
+
+    return async () => {
+      await Promise.allSettled(streams.map((source) => source.close()));
+      await Promise.allSettled(workers);
+    };
   });
 }
