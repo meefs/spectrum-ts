@@ -6,5 +6,6 @@ export interface Message {
   platform: string;
   raw: unknown;
   sender: User;
+  spaceId?: string;
   timestamp: Date;
 }

@@ -118,12 +118,13 @@ export async function Spectrum<
       [Space, Message]
     > {
       for await (const msg of providerMessages) {
+        const spaceId = msg.spaceId ?? msg.sender.id;
         const resolvedSpace: Space = {
-          id: msg.sender.id,
+          id: spaceId,
           __platform: definition.name,
           send: async (...content: [Content, ...Content[]]) => {
             await definition.actions.send({
-              space: { id: msg.sender.id, __platform: definition.name },
+              space: { id: spaceId, __platform: definition.name },
               content,
               client,
               config,

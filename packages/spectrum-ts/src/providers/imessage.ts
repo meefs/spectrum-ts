@@ -18,6 +18,7 @@ interface IMessageMessage {
   platform: "iMessage";
   raw: unknown;
   sender: { id: string; __platform: "iMessage" };
+  spaceId?: string;
   timestamp: Date;
 }
 
@@ -29,6 +30,7 @@ const toIMessageMessage = (event: RemoteMessageEvent): IMessageMessage => ({
     id: event.message.sender?.address ?? "",
     __platform: "iMessage",
   },
+  spaceId: event.chatGuid,
   timestamp: event.timestamp,
 });
 

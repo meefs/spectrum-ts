@@ -183,6 +183,7 @@ interface ToMessageVariant extends Fn {
         content: Content[];
         sender: User & KnownKeys<SchemaInfer<Def["user"]>>;
         raw: unknown;
+        spaceId?: string;
         timestamp: Date;
       }
     : never;
