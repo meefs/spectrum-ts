@@ -7,14 +7,22 @@ export const terminal = definePlatform("terminal", {
 
   lifecycle: {
     createClient: async () => {
-      return createInterface({
+      const client = createInterface({
         input: process.stdin,
         output: process.stdout,
       });
+
+      client.on("SIGINT", () => {
+        client.close();
+        process.kill(process.pid, "SIGINT");
+      });
+
+      return client;
     },
 
     destroyClient: async ({ client }) => {
       client.close();
+      process.stdin.unref();
     },
   },
 

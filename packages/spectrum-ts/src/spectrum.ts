@@ -207,11 +207,6 @@ export async function Spectrum<
     }
     stopped = true;
 
-    const clientShutdowns = Array.from(platformStates.values(), (state) =>
-      state.definition.lifecycle.destroyClient({
-        client: state.client,
-      })
-    );
     const streamShutdowns = [
       messagesStream.close(),
       ...Array.from(customEventStreams.values(), (eventStream) =>
@@ -223,13 +218,21 @@ export async function Spectrum<
     process.off("SIGTERM", handleSignal);
 
     await Promise.allSettled(streamShutdowns);
+    const clientShutdowns = Array.from(platformStates.values(), (state) =>
+      state.definition.lifecycle.destroyClient({
+        client: state.client,
+      })
+    );
     await Promise.allSettled(clientShutdowns);
     customEventStreams.clear();
     platformStates.clear();
   };
 
   const handleSignal = () => {
-    stopOnce().catch(() => undefined);
+    setTimeout(() => process.exit(1), 3000).unref();
+    stopOnce()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
   };
   process.on("SIGINT", handleSignal);
   process.on("SIGTERM", handleSignal);
