@@ -191,7 +191,6 @@ export const imessage = definePlatform("iMessage", {
   user: {
     resolve: async ({ input }) => ({
       id: input.userID,
-      __platform: "iMessage" as const,
     }),
   },
 
@@ -204,7 +203,7 @@ export const imessage = definePlatform("iMessage", {
         input.options.type === "dm"
           ? directChat(input.users[0]?.id ?? "")
           : groupChat("");
-      return { id: id as string, __platform: "iMessage" as const };
+      return { id: id as string };
     },
   },
 });

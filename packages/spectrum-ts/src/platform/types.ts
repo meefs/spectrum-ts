@@ -5,7 +5,9 @@ import type { Message } from "../types/message";
 import type { Space } from "../types/space";
 import type { User } from "../types/user";
 
+type ResolvedSpace = Pick<Space, "id">;
 type SpaceRef = Pick<Space, "id" | "__platform">;
+type ResolvedUser = Pick<User, "id">;
 
 // ---------------------------------------------------------------------------
 // Type-level helpers
@@ -96,7 +98,7 @@ export interface PlatformDef<
       };
       client: _Client;
       config: z.infer<_ConfigSchema>;
-    }) => Promise<SpaceRef>;
+    }) => Promise<ResolvedSpace>;
   };
 
   user: {
@@ -105,7 +107,7 @@ export interface PlatformDef<
       input: { userID: string };
       client: _Client;
       config: z.infer<_ConfigSchema>;
-    }) => Promise<User & KnownKeys<z.infer<_UserSchema>>>;
+    }) => Promise<ResolvedUser & KnownKeys<z.infer<_UserSchema>>>;
   };
 }
 

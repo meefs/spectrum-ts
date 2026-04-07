@@ -55,14 +55,12 @@ export const terminal = definePlatform("terminal", {
   user: {
     resolve: async ({ input }) => ({
       id: input.userID,
-      __platform: "terminal" as const,
     }),
   },
 
   space: {
     resolve: async () => ({
       id: "terminal",
-      __platform: "terminal" as const,
     }),
   },
 });

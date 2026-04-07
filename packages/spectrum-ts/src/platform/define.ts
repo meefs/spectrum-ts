@@ -44,12 +44,16 @@ function createPlatformInstance<
         client: runtime.client as _Client,
         config: runtime.config as z.infer<_ConfigSchema>,
       });
+      const spaceRef = {
+        id: resolved.id,
+        __platform: def.name,
+      };
       return {
         ...resolved,
-        __platform: def.name,
+        ...spaceRef,
         send: async (...content: [Content, ...Content[]]) => {
           await def.actions.send({
-            space: resolved,
+            space: spaceRef,
             content,
             client: runtime.client as _Client,
             config: runtime.config as z.infer<_ConfigSchema>,
