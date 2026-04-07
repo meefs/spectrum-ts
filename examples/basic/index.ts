@@ -25,5 +25,5 @@ for await (const [space, message] of app.messages) {
   await space.send(text(`echo: ${incoming}`));
 }
 
-const newUser = await imessage(app).user("xxx");
-await imessage(app).space(newUser);
+// const newUser = await imessage(app).user("xxx");
+// await imessage(app).space(newUser);

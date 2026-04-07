@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./providers/*": "./src/providers/*.ts"
+    "./providers/*": "./src/providers/*/index.ts"
   },
   "dependencies": {
     "@photon-ai/advanced-imessage": "^0.1.0",
