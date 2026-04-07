@@ -10,7 +10,6 @@ export type {
   PlatformProviderConfig,
   PlatformSpace,
   PlatformUser,
-  UnifiedMessage,
 } from "./platform/types";
 export { Spectrum, type SpectrumInstance } from "./spectrum";
 export { type Content, text } from "./types/content";

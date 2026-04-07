@@ -4,10 +4,9 @@ import type {
   CustomEventStreams,
   PlatformProviderConfig,
   SpectrumLike,
-  UnifiedMessage,
 } from "./platform/types";
 import type { Content } from "./types/content";
-import type { Message as BaseMessage } from "./types/message";
+import type { Message } from "./types/message";
 import type { Space } from "./types/space";
 import { type ManagedStream, mergeStreams, stream } from "./utils/stream";
 
@@ -19,7 +18,7 @@ export type SpectrumInstance<
   Providers extends PlatformProviderConfig[] = PlatformProviderConfig[],
 > = SpectrumLike<Providers> &
   CustomEventStreams<Providers> & {
-    readonly messages: AsyncIterable<[Space, UnifiedMessage<Providers>]>;
+    readonly messages: AsyncIterable<[Space, Message]>;
     stop(): Promise<void>;
     send(space: Space, ...content: [Content, ...Content[]]): Promise<void>;
   };
@@ -50,8 +49,6 @@ export async function Spectrum<
     projectSecret,
     providers: options.providers,
   });
-
-  type Message = UnifiedMessage<Providers>;
 
   const platformStates = new Map<
     string,
@@ -112,7 +109,7 @@ export async function Spectrum<
     const providerMessages = definition.events.messages({
       client,
       config,
-    }) as AsyncIterable<BaseMessage>;
+    }) as AsyncIterable<Message>;
 
     const normalizeMessages = async function* (): AsyncIterable<
       [Space, Message]

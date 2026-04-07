@@ -3,10 +3,9 @@ import type z from "zod";
 import type { Content } from "../types/content";
 import type { Message } from "../types/message";
 import type { Space } from "../types/space";
+import type { User } from "../types/user";
 
 type SpaceRef = Pick<Space, "id" | "__platform">;
-
-import type { User } from "../types/user";
 
 // ---------------------------------------------------------------------------
 // Type-level helpers
@@ -176,19 +175,6 @@ interface ExtractDef extends Fn {
   return: this["arg0"] extends PlatformProviderConfig<infer Def> ? Def : never;
 }
 
-interface ToMessageVariant extends Fn {
-  return: this["arg0"] extends PlatformProviderConfig<infer Def>
-    ? {
-        platform: Def["name"];
-        content: Content[];
-        sender: User & KnownKeys<SchemaInfer<Def["user"]>>;
-        raw: unknown;
-        spaceId?: string;
-        timestamp: Date;
-      }
-    : never;
-}
-
 interface ExtractDefByName<Name extends string> extends Fn {
   return: this["arg0"] extends { name: Name } ? true : false;
 }
@@ -233,15 +219,6 @@ export type ExtractProviderDef<
 >;
 
 // ---------------------------------------------------------------------------
-// UnifiedMessage — discriminated union from providers tuple
-// ---------------------------------------------------------------------------
-
-export type UnifiedMessage<Providers extends PlatformProviderConfig[]> = Pipe<
-  Providers,
-  [Tuples.Map<ToMessageVariant>, Tuples.ToUnion]
->;
-
-// ---------------------------------------------------------------------------
 // AllCustomEventNames — union of all non-messages event names across providers
 // ---------------------------------------------------------------------------
 
@@ -277,11 +254,7 @@ export type CustomEventStreams<Providers extends PlatformProviderConfig[]> = {
 
 export type PlatformSpace<_Def extends AnyPlatformDef> = Space<_Def>;
 
-export type PlatformMessage<Def extends AnyPlatformDef> = Message &
-  KnownKeys<SchemaInfer<Def["message"]>> & {
-    platform: Def["name"];
-    sender: User & KnownKeys<SchemaInfer<Def["user"]>>;
-  };
+export type PlatformMessage<_Def extends AnyPlatformDef> = Message<_Def>;
 
 export type PlatformUser<Def extends AnyPlatformDef> = User &
   KnownKeys<SchemaInfer<Def["user"]>>;
