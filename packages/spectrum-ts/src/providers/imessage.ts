@@ -4,13 +4,37 @@ import {
   createClient,
   directChat,
   groupChat,
+  type MessageEvent,
 } from "@photon-ai/advanced-imessage";
 import { IMessageSDK } from "@photon-ai/imessage-kit";
 import z from "zod";
 import { definePlatform } from "../platform/define";
-import { channel, fromEmitter } from "../utils/stream";
+import {
+  type ClosableAsyncIterable,
+  fromEmitter,
+  mergeClosableIterables,
+} from "../utils/stream";
 
 type IMessageClient = IMessageSDK | AdvancedIMessage[];
+type RemoteMessageEvent = Extract<MessageEvent, { type: "message.received" }>;
+interface IMessageMessage {
+  content: { type: "plain_text"; text: string }[];
+  platform: "iMessage";
+  raw: unknown;
+  sender: { id: string; __platform: "iMessage" };
+  timestamp: Date;
+}
+
+const toIMessageMessage = (event: RemoteMessageEvent): IMessageMessage => ({
+  content: [{ type: "plain_text", text: event.message.text ?? "" }],
+  platform: "iMessage",
+  raw: event,
+  sender: {
+    id: event.message.sender?.address ?? "",
+    __platform: "iMessage",
+  },
+  timestamp: event.timestamp,
+});
 
 export const imessage = definePlatform({
   name: "iMessage",
@@ -62,13 +86,7 @@ export const imessage = definePlatform({
   events: {
     messages({ client }) {
       if (client instanceof IMessageSDK) {
-        return fromEmitter<{
-          content: { type: "plain_text"; text: string }[];
-          platform: "iMessage";
-          raw: unknown;
-          sender: { id: string; __platform: "iMessage" };
-          timestamp: Date;
-        }>((emit) => {
+        return fromEmitter<IMessageMessage>((emit) => {
           client.startWatching({
             onMessage: (msg) => {
               emit({
@@ -89,68 +107,15 @@ export const imessage = definePlatform({
         });
       }
 
-      // Remote mode: merge message streams from all clients
-      const merged = channel<{
-        content: { type: "plain_text"; text: string }[];
-        platform: "iMessage";
-        raw: unknown;
-        sender: { id: string; __platform: "iMessage" };
-        timestamp: Date;
-      }>();
-      const streams = client.map((remote) =>
-        remote.messages.subscribe("message.received")
+      const streams: ClosableAsyncIterable<RemoteMessageEvent>[] = client.map(
+        (remote) => remote.messages.subscribe("message.received")
       );
 
-      for (const stream of streams) {
-        (async () => {
-          for await (const event of stream) {
-            const msg = event.message;
-            merged.push({
-              content: [{ type: "plain_text", text: msg?.text ?? "" }],
-              platform: "iMessage",
-              raw: event,
-              sender: {
-                id: msg?.sender?.address ?? "",
-                __platform: "iMessage",
-              },
-              timestamp: event.timestamp,
-            });
-          }
-        })().catch(() => {
-          // Subscription stream errored — close merged channel gracefully
-          merged.close();
-        });
-      }
-
       return {
-        [Symbol.asyncIterator]() {
-          const iterator = merged.iterable[Symbol.asyncIterator]();
-          let closed = false;
-
-          const cleanup = async () => {
-            if (closed) {
-              return;
-            }
-            closed = true;
-            merged.close();
-            await Promise.allSettled(streams.map((stream) => stream.close()));
-          };
-
-          return {
-            next: () => iterator.next(),
-            return: async (): Promise<
-              IteratorResult<{
-                content: { type: "plain_text"; text: string }[];
-                platform: "iMessage";
-                raw: unknown;
-                sender: { id: string; __platform: "iMessage" };
-                timestamp: Date;
-              }>
-            > => {
-              await cleanup();
-              return { value: undefined, done: true };
-            },
-          };
+        async *[Symbol.asyncIterator]() {
+          for await (const event of mergeClosableIterables(streams)) {
+            yield toIMessageMessage(event);
+          }
         },
       };
     },

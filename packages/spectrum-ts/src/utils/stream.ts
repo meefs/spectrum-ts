@@ -1,7 +1,13 @@
+import { Repeater } from "@repeaterjs/repeater";
+
 export interface Channel<T> {
   close(): void;
   iterable: AsyncIterable<T>;
   push(value: T): void;
+}
+
+export interface ClosableAsyncIterable<T> extends AsyncIterable<T> {
+  close(): Promise<void> | void;
 }
 
 export function channel<T>(): Channel<T> {
@@ -76,4 +82,43 @@ export function fromEmitter<T>(
       };
     },
   };
+}
+
+export function mergeClosableIterables<T>(
+  streams: readonly ClosableAsyncIterable<T>[]
+): AsyncIterable<T> {
+  return new Repeater<T>(async (push, stop) => {
+    if (streams.length === 0) {
+      stop();
+      return;
+    }
+
+    let openStreams = streams.length;
+
+    const workers = streams.map((stream) =>
+      (async () => {
+        try {
+          for await (const value of stream) {
+            await push(value);
+          }
+        } catch (error) {
+          stop(error);
+        } finally {
+          openStreams -= 1;
+          if (openStreams === 0) {
+            stop();
+          }
+        }
+      })()
+    );
+
+    try {
+      await stop;
+    } finally {
+      await Promise.allSettled(
+        streams.map((stream) => Promise.resolve(stream.close()))
+      );
+      await Promise.allSettled(workers);
+    }
+  });
 }

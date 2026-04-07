@@ -68,8 +68,10 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
     ReturnType<typeof channel<unknown>>
   >();
 
-  let started = false;
+  let initialized = false;
+  let messagesStarted = false;
   let stopped = false;
+  const startedCustomEvents = new Set<string>();
 
   const getOrCreateCustomStream = (eventName: string) => {
     let eventStream = customEventStreams.get(eventName);
@@ -131,11 +133,11 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
     }
   };
 
-  const startOnce = async () => {
-    if (started) {
+  const initializeOnce = async () => {
+    if (initialized) {
       return;
     }
-    started = true;
+    initialized = true;
 
     for (const provider of options.providers) {
       const providerConfig = provider as PlatformProviderConfig;
@@ -151,29 +153,44 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
         config: userConfig,
         definition: def,
       });
+    }
+  };
 
-      // Start messages event stream (fire-and-forget)
-      const messagesIterable = def.events.messages({
+  const startMessagesOnce = async () => {
+    if (messagesStarted) {
+      return;
+    }
+    messagesStarted = true;
+    await initializeOnce();
+
+    for (const [, state] of platformStates) {
+      const { client, config, definition } = state;
+      const messagesIterable = definition.events.messages({
         client,
-        config: userConfig,
+        config,
       });
-      consumeMessages(messagesIterable, def, client, userConfig);
+      consumeMessages(messagesIterable, definition, client, config);
+    }
+  };
 
-      // Start custom event streams (fire-and-forget)
-      for (const eventName of Object.keys(def.events)) {
-        if (eventName === "messages") {
-          continue;
-        }
-        const producer = def.events[eventName] as
-          | ((ctx: {
-              client: unknown;
-              config: unknown;
-            }) => AsyncIterable<unknown>)
-          | undefined;
-        if (producer) {
-          const iterable = producer({ client, config: userConfig });
-          consumeCustomEvent(eventName, iterable, def.name);
-        }
+  const startCustomEventOnce = async (eventName: string) => {
+    if (startedCustomEvents.has(eventName)) {
+      return;
+    }
+    startedCustomEvents.add(eventName);
+    await initializeOnce();
+
+    for (const [, state] of platformStates) {
+      const { client, config, definition } = state;
+      const producer = definition.events[eventName] as
+        | ((ctx: {
+            client: unknown;
+            config: unknown;
+          }) => AsyncIterable<unknown>)
+        | undefined;
+      if (producer) {
+        const iterable = producer({ client, config });
+        consumeCustomEvent(eventName, iterable, definition.name);
       }
     }
   };
@@ -191,17 +208,18 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
     }
     customEventStreams.clear();
 
-    // Signal all running iterators to stop
-    for (const iterator of runningIterators) {
-      await iterator.return?.({ value: undefined, done: true });
-    }
+    const iteratorShutdowns = runningIterators.map((iterator) =>
+      Promise.resolve(iterator.return?.({ value: undefined, done: true }))
+    );
     runningIterators.length = 0;
 
-    for (const [, state] of platformStates) {
-      await state.definition.lifecycle.destroyClient({
+    const clientShutdowns = Array.from(platformStates.values(), (state) =>
+      state.definition.lifecycle.destroyClient({
         client: state.client,
-      });
-    }
+      })
+    );
+
+    await Promise.allSettled([...iteratorShutdowns, ...clientShutdowns]);
     platformStates.clear();
   };
 
@@ -219,7 +237,7 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
         async next() {
           if (firstNext) {
             firstNext = false;
-            await startOnce();
+            await startMessagesOnce();
           }
           return iterator.next();
         },
@@ -240,11 +258,30 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
     {
       get(_target, prop: string) {
         const eventStream = customEventStreams.get(prop);
-        if (eventStream) {
-          return eventStream.iterable;
-        }
-        // Pre-create the channel so it's ready when events start flowing
-        return getOrCreateCustomStream(prop).iterable;
+        const iterable =
+          eventStream?.iterable ?? getOrCreateCustomStream(prop).iterable;
+
+        return {
+          [Symbol.asyncIterator]() {
+            const iterator = iterable[Symbol.asyncIterator]();
+            let firstNext = true;
+            return {
+              async next() {
+                if (firstNext) {
+                  firstNext = false;
+                  await startCustomEventOnce(prop);
+                }
+                return iterator.next();
+              },
+              async return() {
+                return (
+                  iterator.return?.() ??
+                  Promise.resolve({ value: undefined, done: true })
+                );
+              },
+            };
+          },
+        };
       },
     }
   );
@@ -253,7 +290,7 @@ export function Spectrum<const Providers extends PlatformProviderConfig[]>(
     __providers: options.providers,
     __internal: { platforms: platformStates },
     messages,
-    start: startOnce,
+    start: initializeOnce,
     stop: stopOnce,
     send: async (space: RichSpace, ...content: [Content, ...Content[]]) => {
       await space.send(...content);
