@@ -1,5 +1,5 @@
 import type z from "zod";
-import type { Content } from "../types/content";
+import type { ContentBuilder } from "../types/content";
 import type { Message } from "../types/message";
 import type { Space } from "../types/space";
 import type {
@@ -102,10 +102,11 @@ function createPlatformInstance<
       return {
         ...parsedSpace,
         ...spaceRef,
-        send: async (...content: [Content, ...Content[]]) => {
+        send: async (...content: [ContentBuilder, ...ContentBuilder[]]) => {
+          const built = await Promise.all(content.map((c) => c.build()));
           await def.actions.send({
             space: spaceRef,
-            content,
+            content: built,
             client: runtime.client as _Client,
             config: runtime.config as z.infer<_ConfigSchema>,
           });

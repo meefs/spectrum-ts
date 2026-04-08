@@ -5,7 +5,7 @@ import type {
   PlatformProviderConfig,
   SpectrumLike,
 } from "./platform/types";
-import type { Content } from "./types/content";
+import type { Content, ContentBuilder } from "./types/content";
 import type { Message } from "./types/message";
 import type { Space } from "./types/space";
 import { type ManagedStream, mergeStreams, stream } from "./utils/stream";
@@ -34,7 +34,10 @@ export type SpectrumInstance<
   CustomEventStreams<Providers> & {
     readonly messages: AsyncIterable<[Space, Message]>;
     stop(): Promise<void>;
-    send(space: Space, ...content: [Content, ...Content[]]): Promise<void>;
+    send(
+      space: Space,
+      ...content: [ContentBuilder, ...ContentBuilder[]]
+    ): Promise<void>;
   };
 
 // ---------------------------------------------------------------------------
@@ -140,10 +143,11 @@ export async function Spectrum<
         };
         const space = {
           ...spaceRef,
-          send: async (...content: [Content, ...Content[]]) => {
+          send: async (...content: [ContentBuilder, ...ContentBuilder[]]) => {
+            const resolved = await Promise.all(content.map((c) => c.build()));
             await definition.actions.send({
               space: spaceRef,
-              content,
+              content: resolved,
               client,
               config,
             });
@@ -298,7 +302,10 @@ export async function Spectrum<
     __internal: { platforms: platformStates },
     messages,
     stop: stopOnce,
-    send: async (space: Space, ...content: [Content, ...Content[]]) => {
+    send: async (
+      space: Space,
+      ...content: [ContentBuilder, ...ContentBuilder[]]
+    ) => {
       await space.send(...content);
     },
   };

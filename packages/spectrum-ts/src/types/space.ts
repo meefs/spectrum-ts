@@ -1,7 +1,7 @@
-import type { Content } from "./content";
+import type { ContentBuilder } from "./content";
 
 export interface Space<_Def = unknown> {
   readonly __platform: string;
   readonly id: string;
-  send(...content: [Content, ...Content[]]): Promise<void>;
+  send(...content: [ContentBuilder, ...ContentBuilder[]]): Promise<void>;
 }
