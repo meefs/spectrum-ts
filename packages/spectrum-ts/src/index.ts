@@ -14,10 +14,10 @@ export type {
 } from "./platform/types";
 export { Spectrum, type SpectrumInstance } from "./spectrum";
 export {
+  attachment,
   type Content,
   type ContentBuilder,
   custom,
-  image,
   text,
 } from "./types/content";
 export type { Message } from "./types/message";

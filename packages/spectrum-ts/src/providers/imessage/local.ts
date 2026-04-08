@@ -38,11 +38,11 @@ export const send = async (
     case "plain_text":
       await client.send(spaceId, content.text);
       break;
-    case "image": {
-      const tmp = join(tmpdir(), `spectrum-${Date.now()}.jpg`);
+    case "attachment": {
+      const tmp = join(tmpdir(), `spectrum-${Date.now()}-${content.name}`);
       await writeFile(tmp, content.data);
       try {
-        await client.send(spaceId, { images: [tmp] });
+        await client.send(spaceId, { files: [tmp] });
       } finally {
         await unlink(tmp).catch(() => {});
       }

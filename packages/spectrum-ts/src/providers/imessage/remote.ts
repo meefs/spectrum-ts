@@ -55,11 +55,11 @@ export const send = async (
     case "plain_text":
       await remote.messages.send(chatGuid(spaceId), content.text);
       break;
-    case "image": {
+    case "attachment": {
       const attachment = await remote.attachments.upload({
         data: content.data,
-        fileName: "image.jpg",
-        mimeType: "image/jpeg",
+        fileName: content.name,
+        mimeType: content.mimeType,
       });
       await remote.messages.send(chatGuid(spaceId), "", {
         attachment: attachment.guid,

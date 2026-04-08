@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { heifToJpeg } from "@photon-hq/heif2jpeg";
+import { basename } from "node:path";
+import { lookup as lookupMimeType } from "mime-types";
 import type { NonEmptyString } from "type-fest";
 import z from "zod";
+
+const DEFAULT_ATTACHMENT_NAME = "attachment";
 
 const contentSchema = z.discriminatedUnion("type", [
   z.object({
@@ -13,8 +16,10 @@ const contentSchema = z.discriminatedUnion("type", [
     raw: z.json(),
   }),
   z.object({
-    type: z.literal("image"),
+    type: z.literal("attachment"),
     data: z.instanceof(Buffer),
+    mimeType: z.string().nonempty(),
+    name: z.string().nonempty(),
   }),
 ]);
 
@@ -41,36 +46,40 @@ export function custom(
   };
 }
 
-function isHeif(data: Uint8Array): boolean {
-  if (data.length < 12) {
-    return false;
-  }
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  if (view.getUint32(4) !== 0x66_74_79_70) {
-    return false;
-  }
-  const brand = String.fromCharCode(
-    view.getUint8(8),
-    view.getUint8(9),
-    view.getUint8(10),
-    view.getUint8(11)
-  );
-  return ["heic", "heix", "hevc", "hevx", "mif1"].includes(brand);
-}
+const resolveAttachmentName = (input: string | Buffer, name?: string): string =>
+  name ||
+  (typeof input === "string" ? basename(input) : DEFAULT_ATTACHMENT_NAME);
 
-export function image(
+const resolveAttachmentMimeType = (name: string, mimeType?: string): string => {
+  if (mimeType) {
+    return mimeType;
+  }
+
+  const resolvedMimeType = lookupMimeType(name);
+  if (!resolvedMimeType) {
+    throw new Error(
+      `Unable to resolve MIME type for attachment "${name}". Pass options.mimeType explicitly.`
+    );
+  }
+
+  return resolvedMimeType;
+};
+
+export function attachment(
   input: string | Buffer,
-  options?: { quality?: number }
+  options?: { mimeType?: string; name?: string }
 ): ContentBuilder {
   return {
     build: async (): Promise<Content> => {
-      let data = typeof input === "string" ? await readFile(input) : input;
-      if (isHeif(data)) {
-        data = (await heifToJpeg(data, {
-          quality: options?.quality ?? 85,
-        })) as Buffer;
-      }
-      return { type: "image" as const, data };
+      const data = typeof input === "string" ? await readFile(input) : input;
+      const name = resolveAttachmentName(input, options?.name);
+
+      return {
+        data,
+        mimeType: resolveAttachmentMimeType(name, options?.mimeType),
+        name,
+        type: "attachment",
+      };
     },
   };
 }

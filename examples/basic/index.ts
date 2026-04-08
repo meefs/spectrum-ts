@@ -1,4 +1,4 @@
-import { image, Spectrum, text } from "spectrum-ts";
+import { attachment, Spectrum, text } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
 
 // import { terminal } from "spectrum-ts/providers/terminal";
@@ -32,5 +32,5 @@ const user1 = await imessage(app).user("+13322593374");
 const newSpace = await imessage(app).space(user1);
 await newSpace.send(
   text("hello"),
-  image("/Users/ryanzhu/Downloads/Image.jpeg")
+  attachment("/Users/ryanzhu/Downloads/Image.jpeg")
 );
