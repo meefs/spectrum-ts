@@ -100,6 +100,41 @@ export const send = async (
   }
 };
 
+export const replyToMessage = async (
+  clients: AdvancedIMessage[],
+  spaceId: string,
+  msgId: string,
+  content: Content
+) => {
+  const remote = clients[0];
+  if (!remote) {
+    return;
+  }
+
+  const chat = chatGuid(spaceId);
+  const replyTo = messageGuid(msgId);
+
+  switch (content.type) {
+    case "plain_text":
+      await remote.messages.send(chat, content.text, { replyTo });
+      break;
+    case "attachment": {
+      const attachment = await remote.attachments.upload({
+        data: content.data,
+        fileName: content.name,
+        mimeType: content.mimeType,
+      });
+      await remote.messages.send(chat, "", {
+        attachment: attachment.guid,
+        replyTo,
+      });
+      break;
+    }
+    default:
+      break;
+  }
+};
+
 export const reactToMessage = async (
   clients: AdvancedIMessage[],
   spaceId: string,

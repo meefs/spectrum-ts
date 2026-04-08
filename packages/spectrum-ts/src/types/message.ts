@@ -1,4 +1,4 @@
-import type { Content } from "./content";
+import type { Content, ContentBuilder } from "./content";
 import type { Space } from "./space";
 import type { User } from "./user";
 
@@ -11,6 +11,7 @@ export interface Message<
   readonly id: string;
   platform: TPlatform;
   react(reaction: string): Promise<void>;
+  reply(...content: [ContentBuilder, ...ContentBuilder[]]): Promise<void>;
   sender: TSender;
   space: TSpace;
   timestamp: Date;

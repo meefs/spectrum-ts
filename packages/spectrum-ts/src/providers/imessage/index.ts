@@ -5,6 +5,7 @@ import { messages as localMessages, send as localSend } from "./local";
 import {
   messages as remoteMessages,
   reactToMessage as remoteReactToMessage,
+  replyToMessage as remoteReplyToMessage,
   send as remoteSend,
   startTyping as remoteStartTyping,
   stopTyping as remoteStopTyping,
@@ -120,6 +121,14 @@ export const imessage = definePlatform("iMessage", {
         return;
       }
       await remoteReactToMessage(client, space.id, messageId, reaction);
+    },
+    replyToMessage: async ({ space, messageId, content, client }) => {
+      if (isLocal(client)) {
+        return;
+      }
+      for (const item of content) {
+        await remoteReplyToMessage(client, space.id, messageId, item);
+      }
     },
   },
 });

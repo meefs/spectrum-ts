@@ -186,6 +186,21 @@ export async function Spectrum<
               config,
             });
           },
+          reply: async (
+            ...content: [ContentBuilder, ...ContentBuilder[]]
+          ): Promise<void> => {
+            if (!definition.actions.replyToMessage) {
+              return;
+            }
+            const resolved = await Promise.all(content.map((c) => c.build()));
+            await definition.actions.replyToMessage({
+              space: spaceRef,
+              messageId: msg.id,
+              content: resolved,
+              client,
+              config,
+            });
+          },
           sender: {
             ...msg.sender,
             __platform: definition.name,

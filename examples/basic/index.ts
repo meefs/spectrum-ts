@@ -27,9 +27,11 @@ for await (const [space, message] of app.messages) {
   await space.responding(async () => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    await message.react(imessage.tapbacks.laugh)
+    await message.react(imessage.tapbacks.laugh);
+    await message.reply(text(`echo: ${incoming}`), text("111"));
+    
 
-    await space.send(text(`echo: ${incoming}`));
+    // await space.send(text(`echo: ${incoming}`));
   });
 }
 
