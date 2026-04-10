@@ -108,7 +108,7 @@ export async function createCloudClients(
     if (tokenData.type === "shared") {
       const address =
         process.env.SPECTRUM_IMESSAGE_ADDRESS ??
-        "spectrum-cloud.photon.codes:443";
+        "spectrum-imessage.photon.codes:443";
 
       return [
         createClient({
