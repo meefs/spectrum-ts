@@ -5,21 +5,21 @@ import type {
   IMessageSDK,
   Message as LocalIMessage,
 } from "@photon-ai/imessage-kit";
-import type { Content } from "../../types/content";
+import type { Content } from "../../content/types";
 import { type ManagedStream, stream } from "../../utils/stream";
 import type { IMessageMessage } from "./types";
 
 const toSpace = (message: LocalIMessage): IMessageMessage["space"] => ({
-  id: `${message.isGroupChat ? "any;+;" : "any;-;"}${message.chatId}`,
-  type: message.isGroupChat ? "group" : "dm",
+  id: message.chatId,
+  type: message.chatKind === "group" ? "group" : "dm",
 });
 
 const toMessage = (message: LocalIMessage): IMessageMessage => ({
-  id: message.guid,
-  content: [{ type: "plain_text", text: message.text ?? "" }],
-  sender: { id: message.sender ?? "" },
+  id: message.id,
+  content: { type: "text", text: message.text ?? "" },
+  sender: { id: message.participant ?? "" },
   space: toSpace(message),
-  timestamp: message.date ?? new Date(),
+  timestamp: message.createdAt,
 });
 
 export const messages = (client: IMessageSDK): ManagedStream<IMessageMessage> =>
@@ -36,14 +36,14 @@ export const send = async (
   content: Content
 ) => {
   switch (content.type) {
-    case "plain_text":
+    case "text":
       await client.send(spaceId, content.text);
       break;
     case "attachment": {
       const tmp = join(tmpdir(), `spectrum-${Date.now()}-${content.name}`);
       await writeFile(tmp, content.data);
       try {
-        await client.send(spaceId, { files: [tmp] });
+        await client.send(spaceId, { attachments: [tmp] });
       } finally {
         await unlink(tmp).catch(() => {});
       }

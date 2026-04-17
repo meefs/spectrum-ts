@@ -2,46 +2,16 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { lookup as lookupMimeType } from "mime-types";
 import z from "zod";
+import type { ContentBuilder } from "./types";
 
 const DEFAULT_ATTACHMENT_NAME = "attachment";
 
-const contentSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("plain_text"),
-    text: z.string().nonempty(),
-  }),
-  z.object({
-    type: z.literal("custom"),
-    raw: z.json(),
-  }),
-  z.object({
-    type: z.literal("attachment"),
-    data: z.instanceof(Buffer),
-    mimeType: z.string().nonempty(),
-    name: z.string().nonempty(),
-  }),
-]);
-
-export type Content = z.infer<typeof contentSchema>;
-
-export interface ContentBuilder {
-  build(): Promise<Content>;
-}
-
-export function text(text: string): ContentBuilder {
-  return {
-    build: (): Promise<Content> =>
-      Promise.resolve({ type: "plain_text", text }),
-  };
-}
-
-export function custom(
-  raw: z.infer<ReturnType<typeof z.json>>
-): ContentBuilder {
-  return {
-    build: (): Promise<Content> => Promise.resolve({ type: "custom", raw }),
-  };
-}
+export const attachmentSchema = z.object({
+  type: z.literal("attachment"),
+  data: z.instanceof(Buffer),
+  mimeType: z.string().nonempty(),
+  name: z.string().nonempty(),
+});
 
 const resolveAttachmentName = (input: string | Buffer, name?: string): string =>
   name ||
@@ -62,21 +32,26 @@ const resolveAttachmentMimeType = (name: string, mimeType?: string): string => {
   return resolvedMimeType;
 };
 
+export const asAttachment = (input: {
+  data: Buffer;
+  mimeType: string;
+  name: string;
+}): z.infer<typeof attachmentSchema> =>
+  attachmentSchema.parse({ type: "attachment", ...input });
+
 export function attachment(
   input: string | Buffer,
   options?: { mimeType?: string; name?: string }
 ): ContentBuilder {
   return {
-    build: async (): Promise<Content> => {
+    build: async () => {
       const data = typeof input === "string" ? await readFile(input) : input;
       const name = resolveAttachmentName(input, options?.name);
-
-      return {
+      return asAttachment({
         data,
         mimeType: resolveAttachmentMimeType(name, options?.mimeType),
         name,
-        type: "attachment",
-      };
+      });
     },
   };
 }
