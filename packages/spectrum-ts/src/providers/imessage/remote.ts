@@ -5,6 +5,7 @@ import {
   messageGuid,
   Reaction,
 } from "@photon-ai/advanced-imessage";
+import { asAttachment } from "../../content/attachment";
 import { asCustom } from "../../content/custom";
 import { asText } from "../../content/text";
 import type { Content } from "../../content/types";
@@ -17,18 +18,47 @@ const TAPBACK_NAMES: ReadonlySet<string> = new Set(
   Object.values(Reaction).filter((r) => r !== "emoji" && r !== "sticker")
 );
 
-const toMessage = (event: ReceivedEvent): IMessageMessage => {
+const baseMessage = (
+  event: ReceivedEvent
+): Omit<IMessageMessage, "id" | "content"> => ({
+  sender: { id: event.message.sender?.address ?? "" },
+  space: {
+    id: event.chatGuid,
+    type: event.chatGuid.includes(";+;") ? "group" : "dm",
+  },
+  timestamp: event.timestamp,
+});
+
+const toMessages = (
+  client: AdvancedIMessage,
+  event: ReceivedEvent
+): IMessageMessage[] => {
+  const base = baseMessage(event);
+  const messageGuidStr = event.message.guid as string;
+
+  if (event.message.attachments.length > 0) {
+    return event.message.attachments.map((info) => ({
+      ...base,
+      id: `${messageGuidStr}:${info.guid as string}`,
+      content: asAttachment({
+        name: info.fileName,
+        mimeType: info.mimeType,
+        size: info.totalBytes,
+        read: async () =>
+          Buffer.from(await client.attachments.downloadBuffer(info.guid)),
+        stream: async () => client.attachments.download(info.guid).stream,
+      }),
+    }));
+  }
+
   const text = event.message.text;
-  return {
-    id: event.message.guid as string,
-    content: text ? asText(text) : asCustom(event.message),
-    sender: { id: event.message.sender?.address ?? "" },
-    space: {
-      id: event.chatGuid,
-      type: event.chatGuid.includes(";+;") ? "group" : "dm",
+  return [
+    {
+      ...base,
+      id: messageGuidStr,
+      content: text ? asText(text) : asCustom(event.message),
     },
-    timestamp: event.timestamp,
-  };
+  ];
 };
 
 const clientStream = (
@@ -39,7 +69,9 @@ const clientStream = (
     (async () => {
       try {
         for await (const event of sub) {
-          emit(toMessage(event));
+          for (const message of toMessages(client, event)) {
+            emit(message);
+          }
         }
         end();
       } catch (e) {
@@ -91,7 +123,7 @@ export const send = async (
       break;
     case "attachment": {
       const attachment = await remote.attachments.upload({
-        data: content.data,
+        data: await content.read(),
         fileName: content.name,
         mimeType: content.mimeType,
       });
@@ -125,7 +157,7 @@ export const replyToMessage = async (
       break;
     case "attachment": {
       const attachment = await remote.attachments.upload({
-        data: content.data,
+        data: await content.read(),
         fileName: content.name,
         mimeType: content.mimeType,
       });
