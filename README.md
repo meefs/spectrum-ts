@@ -57,10 +57,6 @@ Visit **[docs.photon.codes](https://docs.photon.codes)** to view the full docume
 | Terminal | `spectrum-ts/providers/terminal` |
 | Custom   | `definePlatform` from `spectrum-ts` |
 
-## Community
-
-The Spectrum community can be found on [GitHub Discussions](https://github.com/photon-hq/spectrum-ts/discussions), where you can ask questions, share ideas, and get help.
-
 ## Issues
 
 Found a bug or have a feature request? Please [open an issue](https://github.com/photon-hq/spectrum-ts/issues) on GitHub. Before filing, search existing issues to avoid duplicates.
