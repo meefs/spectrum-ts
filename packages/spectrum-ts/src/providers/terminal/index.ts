@@ -13,7 +13,10 @@ import { inspect } from "node:util";
 import z from "zod";
 import { asAttachment } from "../../content/attachment";
 import { asContact } from "../../content/contact";
+import { asCustom } from "../../content/custom";
+import { reactionSchema } from "../../content/reaction";
 import { asVoice } from "../../content/voice";
+import type { ProviderMessageRecord } from "../../platform/build";
 import { definePlatform } from "../../platform/define";
 import { UnsupportedError } from "../../utils/errors";
 import { fromVCard, toVCard } from "../../utils/vcard";
@@ -363,6 +366,33 @@ function parseTimestamp(s: string): Date {
   return Number.isNaN(t) ? new Date() : new Date(t);
 }
 
+function reactionTargetFromProtocol(
+  reaction: ProtocolReactionNotification
+): ProviderMessageRecord {
+  // The protocol only gives us the target id. Core accepts nested raw provider
+  // records in reaction content and wraps them into full Messages before users
+  // see the event.
+  const target = {
+    id: reaction.messageId,
+    content: asCustom({ terminal_type: "reaction-target", stub: true }),
+    sender: { id: "__unknown__" },
+    space: { id: reaction.spaceId },
+    timestamp: parseTimestamp(reaction.timestamp),
+  } satisfies ProviderMessageRecord;
+
+  return target;
+}
+
+function reactionContentFromProtocol(
+  reaction: ProtocolReactionNotification
+): SpectrumContent {
+  return reactionSchema.parse({
+    type: "reaction",
+    emoji: reaction.reaction,
+    target: reactionTargetFromProtocol(reaction),
+  });
+}
+
 async function spectrumToProtocol(
   content: SpectrumContent
 ): Promise<ProtocolContent> {
@@ -569,18 +599,13 @@ export const terminal = definePlatform("terminal", {
           continue;
         }
         // Reactions ride the messages stream as first-class `reaction`
-        // content (upstream spectrum-ts PR #31 added this variant to the
-        // Content union). Agents filter with `msg.content.type === "reaction"`
-        // and read `.emoji` + `.target` directly.
+        // content. The protocol only provides the target id, so synthesize a
+        // minimal raw target for core to wrap into a full Message at emit time.
         const r = evt.value;
         client.knownChats.add(r.spaceId);
         yield {
           id: `reaction:${r.messageId}:${r.reaction}:${r.timestamp}`,
-          content: {
-            type: "reaction" as const,
-            emoji: r.reaction,
-            target: r.messageId,
-          },
+          content: reactionContentFromProtocol(r),
           sender: { id: r.senderId },
           space: { id: r.spaceId },
           timestamp: parseTimestamp(r.timestamp),
@@ -610,11 +635,11 @@ export const terminal = definePlatform("terminal", {
       await c.session.request("stopTyping", { spaceId: space.id });
     },
 
-    reactToMessage: async ({ client, space, messageId, reaction }) => {
+    reactToMessage: async ({ client, space, target, reaction }) => {
       const c = client as TerminalClient;
       await c.session.request("reactToMessage", {
         spaceId: space.id,
-        messageId,
+        messageId: target.id,
         reaction,
       });
     },
