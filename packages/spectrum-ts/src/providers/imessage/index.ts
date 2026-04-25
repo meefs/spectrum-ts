@@ -7,7 +7,7 @@ import {
   getMessage as localGetMessage,
   messages as localMessages,
   send as localSend,
-} from "./local";
+} from "./local/api";
 import {
   editMessage as remoteEditMessage,
   getMessage as remoteGetMessage,
@@ -17,7 +17,7 @@ import {
   send as remoteSend,
   startTyping as remoteStartTyping,
   stopTyping as remoteStopTyping,
-} from "./remote";
+} from "./remote/api";
 import {
   configSchema,
   type IMessageClient,
@@ -26,6 +26,9 @@ import {
   messageSchema,
   spaceSchema,
 } from "./types";
+
+const isPollContent = (content: { type: string }): boolean =>
+  content.type === "poll" || content.type === "poll_option";
 
 export const imessage = definePlatform("iMessage", {
   config: configSchema,
@@ -140,6 +143,13 @@ export const imessage = definePlatform("iMessage", {
       if (isLocal(client)) {
         throw UnsupportedError.action("react", "iMessage (local mode)");
       }
+      if (isPollContent(target.content)) {
+        throw UnsupportedError.action(
+          "react",
+          "iMessage",
+          "iMessage polls do not support reactions"
+        );
+      }
       await remoteReactToMessage(
         client,
         space.id,
@@ -147,9 +157,16 @@ export const imessage = definePlatform("iMessage", {
         reaction
       );
     },
-    replyToMessage: async ({ space, messageId, content, client }) => {
+    replyToMessage: async ({ space, messageId, target, content, client }) => {
       if (isLocal(client)) {
         throw UnsupportedError.action("reply", "iMessage (local mode)");
+      }
+      if (isPollContent(target.content)) {
+        throw UnsupportedError.action(
+          "reply",
+          "iMessage",
+          "iMessage polls do not support replies"
+        );
       }
       return await remoteReplyToMessage(client, space.id, messageId, content);
     },
