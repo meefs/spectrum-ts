@@ -63,6 +63,11 @@ export const send = async (
       );
       return synthRecord(spaceId, content);
     }
+    case "effect":
+      throw unsupportedLocalContent(
+        "effect",
+        "message effects require remote iMessage"
+      );
     case "poll":
       throw unsupportedLocalContent("poll");
     default:

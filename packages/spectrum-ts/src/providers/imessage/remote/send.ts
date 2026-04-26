@@ -2,6 +2,7 @@ import {
   type AdvancedIMessage,
   type AttachmentGuid,
   chatGuid,
+  type MessageEffect,
   type MessagePart,
   messageGuid,
   type SendOptions,
@@ -81,6 +82,10 @@ const replyOptions = (
   replyTo: ReplyGuid | undefined
 ): SendOptions | undefined => (replyTo ? { replyTo } : undefined);
 
+const effectOption = (
+  effect: MessageEffect | undefined
+): Pick<SendOptions, "effect"> => (effect ? { effect } : {});
+
 const sendVCardAttachment = (
   remote: AdvancedIMessage,
   name: string,
@@ -133,14 +138,24 @@ const sendContent = async (
   spaceId: string,
   chat: ChatGuid,
   content: Content,
-  replyTo?: ReplyGuid
+  replyTo?: ReplyGuid,
+  effect?: MessageEffect
 ): Promise<ProviderMessageRecord> => {
   switch (content.type) {
+    case "effect":
+      return sendContent(
+        remote,
+        spaceId,
+        chat,
+        content.content,
+        replyTo,
+        content.effect as MessageEffect
+      );
     case "text": {
       const receipt = await remote.messages.send(
         chat,
         content.text,
-        withReply({}, replyTo)
+        withReply(effectOption(effect), replyTo)
       );
       return outboundRecord(
         spaceId,
@@ -166,6 +181,7 @@ const sendContent = async (
       const { guid } = await uploadAttachment(remote, content);
       const receipt = await remote.messages.send(chat, "", {
         attachment: guid,
+        ...effectOption(effect),
         ...replyOptions(replyTo),
       });
       return outboundRecord(
@@ -230,7 +246,9 @@ export const validateGroupContent = (
   content: Extract<Content, { type: "group" }>
 ): void => {
   // Strict validation: fail before any upload when a group contains items
-  // iMessage cannot carry inside a multi-part message.
+  // iMessage cannot carry inside a multi-part message. `effect` is rejected
+  // here too — it isn't in `GROUP_ITEM_ALLOWED` because iMessage does not
+  // apply message effects to multi-part sends.
   let textCount = 0;
   for (const sub of content.items) {
     const itemType = sub.content.type;
