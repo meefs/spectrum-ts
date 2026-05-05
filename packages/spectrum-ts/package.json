@@ -14,6 +14,11 @@
       "types": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./providers": {
+      "bun": "./src/providers/index.ts",
+      "types": "./src/providers/index.ts",
+      "default": "./dist/providers/index.js"
+    },
     "./providers/*": {
       "bun": "./src/providers/*/index.ts",
       "types": "./src/providers/*/index.ts",
@@ -25,6 +30,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./providers": {
+        "types": "./dist/providers/index.d.ts",
+        "default": "./dist/providers/index.js"
       },
       "./providers/*": {
         "types": "./dist/providers/*/index.d.ts",
