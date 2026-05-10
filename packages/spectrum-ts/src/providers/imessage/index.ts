@@ -1,5 +1,6 @@
 import { createClient, MessageEffect } from "@photon-ai/advanced-imessage";
 import { IMessageSDK } from "@photon-ai/imessage-kit";
+import type { Edit } from "../../content/edit";
 import { definePlatform } from "../../platform/define";
 import { UnsupportedError } from "../../utils/errors";
 
@@ -37,6 +38,27 @@ import {
 
 const isPollContent = (content: { type: string }): boolean =>
   content.type === "poll" || content.type === "poll_option";
+
+const handleEdit = async (
+  client: IMessageClient,
+  space: { id: string; phone: string },
+  content: Edit
+): Promise<void> => {
+  if (isLocal(client)) {
+    throw UnsupportedError.action("edit", "iMessage (local mode)");
+  }
+  if (content.content.type !== "text") {
+    // Mirrors `remoteEditMessage`'s own check — surface as an
+    // UnsupportedError so dispatchSend warn-and-skips uniformly.
+    throw UnsupportedError.content(
+      "edit",
+      "iMessage",
+      `only text content can be edited (got "${content.content.type}")`
+    );
+  }
+  const remote = clientForPhone(client, space.phone);
+  await remoteEditMessage(remote, space.id, content.target.id, content.content);
+};
 
 export const imessage = definePlatform("iMessage", {
   config: configSchema,
@@ -140,57 +162,15 @@ export const imessage = definePlatform("iMessage", {
     schema: messageSchema,
   },
 
-  events: {
-    messages: ({ client }) =>
-      isLocal(client) ? localMessages(client) : remoteMessages(client),
-  },
+  messages: ({ client }) =>
+    isLocal(client) ? localMessages(client) : remoteMessages(client),
 
-  actions: {
-    send: async ({ space, content, client }) => {
-      if (isLocal(client)) {
-        return await localSend(client, space.id, content);
-      }
-      const remote = clientForPhone(client, space.phone);
-      return await remoteSend(remote, space.id, content);
-    },
-    startTyping: async ({ space, client }) => {
-      if (isLocal(client)) {
-        return;
-      }
-      const remote = clientForPhone(client, space.phone);
-      await remoteStartTyping(remote, space.id);
-    },
-    stopTyping: async ({ space, client }) => {
-      if (isLocal(client)) {
-        return;
-      }
-      const remote = clientForPhone(client, space.phone);
-      await remoteStopTyping(remote, space.id);
-    },
-    reactToMessage: async ({ space, target, reaction, client }) => {
-      if (isLocal(client)) {
-        throw UnsupportedError.action("react", "iMessage (local mode)");
-      }
-      if (isPollContent(target.content)) {
-        throw UnsupportedError.action(
-          "react",
-          "iMessage",
-          "iMessage polls do not support reactions"
-        );
-      }
-      const remote = clientForPhone(client, space.phone);
-      await remoteReactToMessage(
-        remote,
-        space.id,
-        target as IMessageMessage,
-        reaction
-      );
-    },
-    replyToMessage: async ({ space, messageId, target, content, client }) => {
+  send: async ({ space, content, client }) => {
+    if (content.type === "reply") {
       if (isLocal(client)) {
         throw UnsupportedError.action("reply", "iMessage (local mode)");
       }
-      if (isPollContent(target.content)) {
+      if (isPollContent(content.target.content)) {
         throw UnsupportedError.action(
           "reply",
           "iMessage",
@@ -198,15 +178,62 @@ export const imessage = definePlatform("iMessage", {
         );
       }
       const remote = clientForPhone(client, space.phone);
-      return await remoteReplyToMessage(remote, space.id, messageId, content);
-    },
-    editMessage: async ({ space, messageId, content, client }) => {
+      return await remoteReplyToMessage(
+        remote,
+        space.id,
+        content.target.id,
+        content.content
+      );
+    }
+    if (content.type === "reaction") {
       if (isLocal(client)) {
-        throw UnsupportedError.action("edit", "iMessage (local mode)");
+        throw UnsupportedError.action("react", "iMessage (local mode)");
+      }
+      if (isPollContent(content.target.content)) {
+        throw UnsupportedError.action(
+          "react",
+          "iMessage",
+          "iMessage polls do not support reactions"
+        );
       }
       const remote = clientForPhone(client, space.phone);
-      await remoteEditMessage(remote, space.id, messageId, content);
-    },
+      // `content.target` is statically typed as the generic `Message`, but
+      // execution only reaches this iMessage `send` action when the target
+      // came from the iMessage stream — hence the unknown-cast widen.
+      await remoteReactToMessage(
+        remote,
+        space.id,
+        content.target as unknown as IMessageMessage,
+        content.emoji
+      );
+      return;
+    }
+    if (content.type === "typing") {
+      // Local mode has no typing API — silently no-op so callers can use
+      // `space.startTyping()` uniformly across modes.
+      if (isLocal(client)) {
+        return;
+      }
+      const remote = clientForPhone(client, space.phone);
+      if (content.state === "start") {
+        await remoteStartTyping(remote, space.id);
+      } else {
+        await remoteStopTyping(remote, space.id);
+      }
+      return;
+    }
+    if (content.type === "edit") {
+      await handleEdit(client, space, content);
+      return;
+    }
+    if (isLocal(client)) {
+      return await localSend(client, space.id, content);
+    }
+    const remote = clientForPhone(client, space.phone);
+    return await remoteSend(remote, space.id, content);
+  },
+
+  actions: {
     getMessage: async ({ space, messageId, client }) => {
       if (isLocal(client)) {
         return localGetMessage(client, messageId);
