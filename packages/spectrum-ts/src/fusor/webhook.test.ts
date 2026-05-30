@@ -153,6 +153,7 @@ describe("spectrum.webhook", () => {
       providers: [makeSlack().config({})],
     });
     const received: [unknown, Message][] = [];
+    const { promise: finished, resolve: done } = Promise.withResolvers<void>();
 
     const result = await spectrum.webhook(
       {
@@ -164,8 +165,10 @@ describe("spectrum.webhook", () => {
       },
       (space, message) => {
         received.push([space, message]);
+        done();
       }
     );
+    await finished;
 
     expect(received).toHaveLength(1);
     const first = received.at(0);
@@ -188,6 +191,7 @@ describe("spectrum.webhook", () => {
       providers: [makeSlack().config({})],
     });
     const received: Message[] = [];
+    const { promise: finished, resolve: done } = Promise.withResolvers<void>();
 
     const result = await spectrum.webhook(
       {
@@ -196,8 +200,10 @@ describe("spectrum.webhook", () => {
       },
       (_space, message) => {
         received.push(message);
+        done();
       }
     );
+    await finished;
 
     expect(result.status).toBe(200);
     expect(received).toHaveLength(1);
@@ -312,11 +318,14 @@ describe("spectrum.webhook", () => {
     await spectrum.stop();
   });
 
-  it("returns 500 when the handler throws (fusor retries at-least-once)", async () => {
+  it("a handler throw does not change the response (200, runs async)", async () => {
     const spectrum = await Spectrum({
       ...baseConfig,
       providers: [makeSlack().config({})],
     });
+
+    let invoked = false;
+    const { promise: finished, resolve: done } = Promise.withResolvers<void>();
 
     const result = await spectrum.webhook(
       {
@@ -327,11 +336,16 @@ describe("spectrum.webhook", () => {
         ),
       },
       () => {
+        invoked = true;
+        done();
         throw new Error("downstream db down");
       }
     );
+    await finished;
 
-    expect(result.status).toBe(500);
+    // The throw is caught + logged asynchronously; the response is unaffected.
+    expect(result.status).toBe(200);
+    expect(invoked).toBe(true);
     await spectrum.stop();
   });
 
@@ -343,6 +357,7 @@ describe("spectrum.webhook", () => {
     });
 
     const received: Message[] = [];
+    const { promise: finished, resolve: done } = Promise.withResolvers<void>();
     await spectrum.webhook(
       {
         headers: {},
@@ -353,8 +368,48 @@ describe("spectrum.webhook", () => {
       },
       (_space, message) => {
         received.push(message);
+        if (received.length === 2) {
+          done();
+        }
       }
     );
+    await finished;
+
+    expect(received.map((m) => m.content)).toEqual([
+      { type: "text", text: "a" },
+      { type: "text", text: "b" },
+    ]);
+
+    await spectrum.stop();
+  });
+
+  it("isolates a handler throw per message — the rest of the batch still delivers", async () => {
+    const spectrum = await Spectrum({
+      ...baseConfig,
+      providers: [makeSlack().config({})],
+      options: { flattenGroups: true },
+    });
+
+    const received: Message[] = [];
+    const { promise: finished, resolve: done } = Promise.withResolvers<void>();
+    await spectrum.webhook(
+      {
+        headers: {},
+        body: encodeEvent(
+          "slack",
+          JSON.stringify({ type: "group", texts: ["a", "b"] })
+        ),
+      },
+      (_space, message) => {
+        received.push(message);
+        // The first item throws; the second must still be delivered.
+        if (received.length === 1) {
+          throw new Error("first item failed");
+        }
+        done();
+      }
+    );
+    await finished;
 
     expect(received.map((m) => m.content)).toEqual([
       { type: "text", text: "a" },
@@ -463,12 +518,15 @@ describe("spectrum.webhook", () => {
     );
 
     let delivered = 0;
+    const { promise: finished, resolve: done } = Promise.withResolvers<void>();
     const result = await spectrum.webhook(
       { headers: signEvent("1700000000", body), body },
       () => {
         delivered += 1;
+        done();
       }
     );
+    await finished;
 
     expect(result.status).toBe(200);
     expect(delivered).toBe(1);
