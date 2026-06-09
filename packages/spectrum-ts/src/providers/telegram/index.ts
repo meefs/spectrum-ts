@@ -1,24 +1,29 @@
 import { type FusorClient, fusor } from "../../fusor";
 import { definePlatform } from "../../platform/define";
-import { initClient } from "./client";
 import { configSchema, TELEGRAM_PLATFORM } from "./config";
 import { handleMessages } from "./inbound/messages";
 import { send } from "./outbound/send";
 import { resolveSpace, resolveUser, spaceParamsSchema } from "./space";
 import type { TelegramPayload } from "./types";
-import { makeVerify } from "./verify";
+import { verify } from "./verify";
+import { ensureWebhook } from "./webhook";
 
 export type { TelegramConfig } from "./config";
 
 /**
  * Telegram provider for Spectrum.
  *
- * Inbound is delivered through Fusor: `createClient` builds the Bot API client
- * and returns a `fusor(...)` client whose `verify` checks the Telegram webhook
- * secret token and parses the `Update` (embedding the client so inbound media
- * can be downloaded lazily with the bot token). Outbound goes through the
- * Telegram Bot API over HTTP. Drop `telegram.config({...})` into
+ * Inbound is delivered through Fusor: `createClient` returns a `fusor(...)`
+ * client whose `verify` checks the Telegram webhook secret token and parses the
+ * `Update` (pure parsing — no client). The `messages` handler reads `config`
+ * from its ctx and builds a photon client inline only to download media bytes.
+ * Outbound (`send`) also builds a photon client inline. Both go through
+ * `@photon-ai/telegram-ts`. Drop `telegram.config({...})` into
  * `Spectrum({ providers: [...] })`.
+ *
+ * In cloud mode (`projectConfig` present), `createClient` also self-registers
+ * the bot's webhook against the Fusor edge for the project slug — see
+ * `ensureWebhook`. Without a slug (local/direct mode) registration is skipped.
  */
 export const telegram = definePlatform(TELEGRAM_PLATFORM, {
   config: configSchema,
@@ -27,13 +32,13 @@ export const telegram = definePlatform(TELEGRAM_PLATFORM, {
     // without deferring this (context-sensitive) arrow — picks the fusor overload.
     createClient: async ({
       config,
-      store,
+      projectConfig,
     }): Promise<FusorClient<TelegramPayload>> => {
-      const client = initClient(store, config);
-      return fusor<TelegramPayload>(
-        TELEGRAM_PLATFORM,
-        makeVerify(config, client)
-      );
+      const slug = projectConfig?.slug;
+      if (slug) {
+        await ensureWebhook(config, slug);
+      }
+      return fusor<TelegramPayload>(TELEGRAM_PLATFORM, verify(config));
     },
   },
   user: { resolve: resolveUser },
