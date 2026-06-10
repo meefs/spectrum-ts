@@ -1,12 +1,16 @@
 import { createLogger, withSpan } from "@photon-ai/otel";
 import { type AvatarInput, avatar as avatarContent } from "../content/avatar";
 import { edit as editContent } from "../content/edit";
-import { reaction as reactionContent } from "../content/reaction";
+import {
+  type Reaction,
+  reaction as reactionContent,
+} from "../content/reaction";
 import { rename as renameContent } from "../content/rename";
 import { reply as replyContent } from "../content/reply";
 import { resolveContents } from "../content/resolve";
 import type { Content, ContentInput } from "../content/types";
 import { typing as typingContent } from "../content/typing";
+import { unsend as unsendContent } from "../content/unsend";
 import type { Message } from "../types/message";
 import type { Space } from "../types/space";
 import type { AgentSender } from "../types/user";
@@ -41,16 +45,18 @@ const supportsAnsiColor = (): boolean => {
 };
 
 // Built-in content types whose provider `send` may return `void`/no id
-// because they're side-effects (reaction, typing indicator, edit), not new
-// messages. Provider-only content types opt into the same semantics by
-// setting `__fireAndForget: true` on the content value — see `isFireAndForget`
+// because they're side-effects (typing indicator, edit, unsend), not new
+// messages. Reactions are NOT fire-and-forget: providers must return a
+// record so the caller gets a reaction Message back as an unsend handle.
+// Provider-only content types opt into fire-and-forget semantics by setting
+// `__fireAndForget: true` on the content value — see `isFireAndForget`
 // below — so the framework doesn't need to know their `type` literal.
 const FIRE_AND_FORGET_TYPES: ReadonlySet<string> = new Set([
-  "reaction",
   "typing",
   "edit",
   "rename",
   "avatar",
+  "unsend",
 ]);
 
 const isFireAndForget = (item: Content): boolean =>
@@ -66,6 +72,7 @@ const RESERVED_SPACE_KEYS: ReadonlySet<string> = new Set([
   "id",
   "send",
   "edit",
+  "unsend",
   "getMessage",
   "rename",
   "avatar",
@@ -97,6 +104,7 @@ const RESERVED_MESSAGE_KEYS: ReadonlySet<string> = new Set([
   "sender",
   "space",
   "timestamp",
+  "unsend",
 ]);
 
 const scopeLabel = (scope: "space" | "message" | "instance"): string => {
@@ -418,9 +426,9 @@ export function buildSpace(params: BuildSpaceParams): Space {
           throw err;
         }
         if (!raw?.id) {
-          // Reactions, typing indicators, and edits are fire-and-forget control
-          // signals — providers may return `void` from `send` for them. Every
-          // other content type must produce a message id.
+          // Typing indicators and edits are fire-and-forget control signals —
+          // providers may return `void` from `send` for them. Every other
+          // content type (including reactions) must produce a message id.
           if (isFireAndForget(item)) {
             return;
           }
@@ -523,12 +531,22 @@ export function buildSpace(params: BuildSpaceParams): Space {
     ...spaceRef,
     ...platformActions,
     send: sendImpl as Space["send"],
-    edit: async (message: Message, newContent: ContentInput): Promise<void> => {
+    edit: async (
+      message: Message | undefined,
+      newContent: ContentInput
+    ): Promise<void> => {
       // Sugar for `space.send(edit(newContent, message))`. Edits are
       // fire-and-forget; the (always-undefined) result is discarded. The
       // `edit()` content builder enforces `direction === "outbound"` at the
       // top, so invalid targets fail fast here too.
       await space.send(editContent(newContent, message));
+    },
+    unsend: async (message: Message | undefined): Promise<void> => {
+      // Sugar for `space.send(unsend(message))`. Unsends are fire-and-forget;
+      // the (always-undefined) result is discarded. The `unsend()` content
+      // builder enforces `direction === "outbound"` at the top, so invalid
+      // targets fail fast here too.
+      await space.send(unsendContent(message));
     },
     getMessage: getMessageImpl,
     rename: async (displayName: string): Promise<void> => {
@@ -596,13 +614,16 @@ export function buildMessage(params: BuildMessageParams): Message {
     return self;
   };
 
-  const react = async (emoji: string): Promise<void> => {
+  const react = async (
+    emoji: string
+  ): Promise<
+    (Message<string, AgentSender> & { content: Reaction }) | undefined
+  > => {
     const target = requireBuiltMessage("react");
-    // Sugar for `space.send(reaction(emoji, target))`. The canonical form
-    // returns a `Message` (or `undefined`); this surface discards it because
-    // reactions are fire-and-forget on most platforms (callers reach for the
-    // canonical form when they need the result).
-    await space.send(reactionContent(emoji, target));
+    // Sugar for `space.send(reaction(emoji, target))`. The resolved Message
+    // is the reaction handle a caller keeps to unsend later; `undefined`
+    // when the platform doesn't support reactions (UnsupportedError → warn).
+    return await space.send(reactionContent(emoji, target));
   };
 
   async function reply(
@@ -646,6 +667,19 @@ export function buildMessage(params: BuildMessageParams): Message {
       );
     }
     await space.send(editContent(newContent, target));
+  };
+
+  const unsend = async (): Promise<void> => {
+    // Defense-in-depth: the `unsend()` content builder enforces the same
+    // guard, but checking here gives a clearer call-site stack for the most
+    // common misuse (calling `.unsend()` on an inbound message).
+    const target = requireBuiltMessage("unsend");
+    if (target.direction !== "outbound") {
+      throw new Error(
+        `cannot unsend message ${target.id}: only outbound messages can be unsent (direction: "${target.direction}")`
+      );
+    }
+    await space.send(unsendContent(target));
   };
 
   // Outbound senders are structurally tagged with `kind: "agent"` so the
@@ -712,6 +746,7 @@ export function buildMessage(params: BuildMessageParams): Message {
     react,
     reply,
     edit,
+    unsend,
     sender: senderWithPlatform,
     space,
     timestamp: params.timestamp,

@@ -26,7 +26,7 @@ const isContent = (v: unknown): boolean =>
  * `reply` like any other content type and route to a threaded send.
  *
  * Reply cannot wrap `reply`, `edit`, `reaction`, `group`, `typing`,
- * `rename`, or `avatar` content.
+ * `rename`, `avatar`, or `unsend` content.
  */
 export const replySchema = z.object({
   type: z.literal("reply"),
@@ -45,9 +45,17 @@ export const asReply = (input: {
   target: Message;
 }): Reply => replySchema.parse({ type: "reply", ...input });
 
-export function reply(content: ContentInput, target: Message): ContentBuilder {
+export function reply(
+  content: ContentInput,
+  target: Message | undefined
+): ContentBuilder {
   return {
     build: async () => {
+      if (!target) {
+        throw new Error(
+          "reply() target is undefined — the targeted message was never sent (space.send resolves undefined when a platform skips unsupported content)"
+        );
+      }
       const [resolved] = await resolveContents([content]);
       if (!resolved) {
         throw new Error("reply() requires content");
@@ -59,7 +67,8 @@ export function reply(content: ContentInput, target: Message): ContentBuilder {
         resolved.type === "group" ||
         resolved.type === "typing" ||
         resolved.type === "rename" ||
-        resolved.type === "avatar"
+        resolved.type === "avatar" ||
+        resolved.type === "unsend"
       ) {
         throw new Error(`reply() cannot wrap "${resolved.type}" content`);
       }

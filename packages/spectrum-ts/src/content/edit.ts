@@ -27,7 +27,7 @@ const isContent = (v: unknown): boolean =>
  * (no new message id is produced; the existing message mutates in place).
  *
  * Edit cannot wrap `edit`, `reply`, `reaction`, `group`, `typing`, `rename`,
- * or `avatar` content.
+ * `avatar`, or `unsend` content.
  */
 export const editSchema = z.object({
   type: z.literal("edit"),
@@ -53,9 +53,17 @@ export const asEdit = (input: {
  * this with an inbound target throws at build time so the misuse surfaces
  * before the send pipeline runs.
  */
-export function edit(content: ContentInput, target: Message): ContentBuilder {
+export function edit(
+  content: ContentInput,
+  target: Message | undefined
+): ContentBuilder {
   return {
     build: async () => {
+      if (!target) {
+        throw new Error(
+          "edit() target is undefined — the targeted message was never sent (space.send resolves undefined when a platform skips unsupported content)"
+        );
+      }
       if (target.direction !== "outbound") {
         throw new Error(
           `edit() target must be an outbound message (got direction "${target.direction}", message id "${target.id}")`
@@ -72,7 +80,8 @@ export function edit(content: ContentInput, target: Message): ContentBuilder {
         resolved.type === "group" ||
         resolved.type === "typing" ||
         resolved.type === "rename" ||
-        resolved.type === "avatar"
+        resolved.type === "avatar" ||
+        resolved.type === "unsend"
       ) {
         throw new Error(`edit() cannot wrap "${resolved.type}" content`);
       }

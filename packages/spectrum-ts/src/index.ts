@@ -26,7 +26,11 @@ export {
   type PollOption,
   poll,
 } from "./content/poll";
-export { type Reaction, reaction } from "./content/reaction";
+export {
+  type Reaction,
+  type ReactionBuilder,
+  reaction,
+} from "./content/reaction";
 export { type Rename, rename } from "./content/rename";
 export { type Reply, reply } from "./content/reply";
 export { resolveContents } from "./content/resolve";
@@ -41,6 +45,7 @@ export {
 export { text } from "./content/text";
 export type { Content, ContentBuilder, ContentInput } from "./content/types";
 export { type Typing, typing } from "./content/typing";
+export { type Unsend, unsend } from "./content/unsend";
 export { type Voice, voice } from "./content/voice";
 export { Emoji, type EmojiKey } from "./emoji";
 export type {
