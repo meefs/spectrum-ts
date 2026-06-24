@@ -1,6 +1,6 @@
 {
   "name": "@spectrum-ts/imessage",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "iMessage provider for spectrum-ts — local and remote (advanced) modes.",
   "repository": {
     "type": "git",

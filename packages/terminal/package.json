@@ -1,6 +1,6 @@
 {
   "name": "@spectrum-ts/terminal",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Terminal (tuichat) provider for spectrum-ts — chat with your agent from the command line.",
   "repository": {
     "type": "git",
