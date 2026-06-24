@@ -1,22 +1,21 @@
-// Spectrum webhook receiver as a first-party Hono plugin.
+// Spectrum webhook receiver as a first-party ElysiaJS plugin.
 //
-// Unlike Elysia, Hono needs no body-parsing workaround: it never auto-parses a
-// request body, so `c.req.raw` is the EXACT, untouched Web `Request` — the body
-// stream is only consumed if you call `c.req.json()` / `c.req.parseBody()`. That
-// matters because Spectrum verifies the native webhook's HMAC over the exact wire
-// bytes (`HMAC-SHA256(secret, "v0:<ts>:<rawBody>")`); re-encoding the body would
-// break it. We hand `c.req.raw` straight to the Web-standard
+// Elysia's `parse` lifecycle auto-parses application/json bodies before the
+// route handler runs, which consumes the `Request` body stream. That breaks
+// Spectrum's HMAC verification, which is computed over the EXACT wire bytes
+// (`HMAC-SHA256(secret, "v0:<ts>:<rawBody>")`) — once Elysia has read (and
+// possibly re-encoded) the body, `app.webhook()` either throws "body already
+// used" or verifies against the wrong bytes.
+//
+// Setting `parse: "none"` on the route makes Elysia skip body parsing entirely,
+// leaving the raw `Request` untouched. We hand it straight to the Web-standard
 // `app.webhook(request, handler)` overload and return the `Response` it produces
 // unchanged — so this plugin is a thin transport adapter that inherits all of
 // `app.webhook()`'s behavior (native + fusor detection, signature verification,
 // fire-and-forget dispatch) for free.
-//
-// It returns a mountable Hono sub-app (Hono's "grouping" pattern), so a host app
-// composes it with `app.route("/", spectrum(...))` — the direct analog of
-// Elysia's `.use(spectrum(...))`.
 
-import { Hono } from "hono";
-import type { WebhookHandler } from "./fusor";
+import type { WebhookHandler } from "@spectrum-ts/core";
+import { Elysia } from "elysia";
 
 /**
  * The minimal structural surface of a Spectrum instance the plugin needs. Kept
@@ -46,30 +45,36 @@ export interface SpectrumPluginOptions {
 }
 
 /**
- * Mount a Spectrum webhook endpoint on a Hono app.
+ * Mount a Spectrum webhook endpoint on an Elysia app.
  *
  * @example
  * ```ts
- * import { Hono } from "hono";
+ * import { Elysia } from "elysia";
  * import { Spectrum } from "spectrum-ts";
- * import { spectrum } from "spectrum-ts/hono";
+ * import { spectrum } from "@spectrum-ts/elysia";
  *
  * const app = await Spectrum({ ...,  webhookSecret: process.env.SPECTRUM_WEBHOOK_SECRET });
  *
- * const server = new Hono().route("/", spectrum({
- *   app,
- *   onMessage: async (space, message) => {
- *     if (message.content.type === "text") await space.send(`echo: ${message.content.text}`);
- *   },
- * }));
+ * new Elysia()
+ *   .use(spectrum({
+ *     app,
+ *     onMessage: async (space, message) => {
+ *       if (message.content.type === "text") await space.send(`echo: ${message.content.text}`);
+ *     },
+ *   }))
+ *   .listen(3000);
  * ```
  */
 export function spectrum(options: SpectrumPluginOptions) {
   const { app, onMessage, path = "/spectrum/webhook" } = options;
 
-  return new Hono().post(path, (c) => app.webhook(c.req.raw, onMessage));
+  // `seed: path` keeps the plugin dedupe-safe (Elysia collapses same-name +
+  // same-seed instances) while still allowing distinct paths to coexist.
+  return new Elysia({ name: "spectrum-webhook", seed: path }).post(
+    path,
+    ({ request }) => app.webhook(request, onMessage),
+    { parse: "none" }
+  );
 }
 
-export type { WebhookHandler } from "./fusor";
-export type { Message } from "./types/message";
-export type { Space } from "./types/space";
+export type { Message, Space, WebhookHandler } from "@spectrum-ts/core";
