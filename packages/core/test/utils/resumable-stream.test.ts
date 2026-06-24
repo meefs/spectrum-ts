@@ -85,6 +85,8 @@ interface FixtureConfig {
   ) => CloseableAsyncIterable<Item>;
   maxRetryDelayMs?: number;
   processMissed?: (event: Item) => Promise<Item>;
+  recover?: (error: unknown, failureCount: number) => Promise<void> | void;
+  recoverTimeoutMs?: number;
 }
 
 const buildStream = (config: FixtureConfig) => {
@@ -113,6 +115,8 @@ const buildStream = (config: FixtureConfig) => {
     maxRetryDelayMs: config.maxRetryDelayMs ?? 8,
     processLive: (event) => Promise.resolve(event),
     processMissed: config.processMissed ?? ((event) => Promise.resolve(event)),
+    recover: config.recover,
+    recoverTimeoutMs: config.recoverTimeoutMs,
     subscribeLive: (cursor) => {
       liveCalls.push(cursor);
       return config.live(liveCalls.length, cursor);
@@ -402,6 +406,70 @@ describe("resumableOrderedStream", () => {
     expect(fx.liveCalls).toEqual([undefined, "1"]);
     expect(fx.fetchCalls).toEqual(["1"]);
     expect(fx.delays).toEqual([1]);
+    await fx.close();
+    expect(await fx.ended).toBe("done");
+  });
+
+  it("runs recover once at the persistent-failure threshold and resumes after it heals", async () => {
+    let healed = false;
+    const recoverAt: number[] = [];
+    const fx = buildStream({
+      // Reject every reconnect (server rejecting a stale token) until recover
+      // "re-mints" it; then the next reconnect succeeds.
+      live: () =>
+        healed
+          ? liveSession([item("1", "ok")], "pending")
+          : liveSession([], "throw", () => new Error("Invalid credentials")),
+      recover: (_error, failureCount) => {
+        recoverAt.push(failureCount);
+        healed = true;
+      },
+    });
+
+    await waitUntil(() => fx.received.includes("ok"));
+    // Fired exactly once, at the threshold — not on every prior failure.
+    expect(recoverAt).toEqual([PERSISTENT_FAILURE_ERROR_THRESHOLD]);
+    await fx.close();
+    expect(await fx.ended).toBe("done");
+  });
+
+  it("throttles recover to once per threshold window while failures persist", async () => {
+    const recoverAt: number[] = [];
+    const fx = buildStream({
+      live: () =>
+        liveSession([], "throw", () => new Error("Invalid credentials")),
+      recover: (_error, failureCount) => {
+        recoverAt.push(failureCount);
+      },
+    });
+
+    await waitUntil(() => recoverAt.length >= 2);
+    // Never before the threshold; re-armed exactly one window later.
+    expect(recoverAt[0]).toBe(PERSISTENT_FAILURE_ERROR_THRESHOLD);
+    expect(recoverAt[1]).toBe(PERSISTENT_FAILURE_ERROR_THRESHOLD * 2);
+    await fx.close();
+    expect(await fx.ended).toBe("done");
+  });
+
+  it("does not let a hung recover hook freeze the reconnect loop", async () => {
+    let recoverCalls = 0;
+    const fx = buildStream({
+      recoverTimeoutMs: 5,
+      live: () =>
+        liveSession([], "throw", () => new Error("Invalid credentials")),
+      // Never settles — must time out instead of blocking retries / close().
+      recover: () =>
+        new Promise<void>(() => {
+          recoverCalls += 1;
+        }),
+    });
+
+    // The loop keeps making new live attempts past the first recover (so the
+    // hung hook did not park the loop), and close() still resolves.
+    await waitUntil(
+      () => fx.liveCalls.length >= PERSISTENT_FAILURE_ERROR_THRESHOLD + 3
+    );
+    expect(recoverCalls).toBeGreaterThanOrEqual(1);
     await fx.close();
     expect(await fx.ended).toBe("done");
   });
