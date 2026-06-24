@@ -1,6 +1,6 @@
 {
   "name": "@spectrum-ts/whatsapp-business",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "description": "WhatsApp Business provider for spectrum-ts.",
   "repository": {
     "type": "git",
