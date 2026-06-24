@@ -22,7 +22,7 @@
     },
     "packages/core": {
       "name": "@spectrum-ts/core",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "dependencies": {
         "@photon-ai/otel": "^1.0.0",
         "@photon-ai/proto": "^0.2.4",
@@ -51,7 +51,7 @@
     },
     "packages/elysia": {
       "name": "@spectrum-ts/elysia",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "devDependencies": {
         "@spectrum-ts/core": "workspace:*",
         "@spectrum-ts/test-support": "workspace:*",
@@ -60,14 +60,14 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "elysia": "^1",
         "typescript": "^5 || ^6.0.0",
       },
     },
     "packages/express": {
       "name": "@spectrum-ts/express",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "devDependencies": {
         "@spectrum-ts/core": "workspace:*",
         "@spectrum-ts/test-support": "workspace:*",
@@ -77,14 +77,14 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "express": "^4 || ^5",
         "typescript": "^5 || ^6.0.0",
       },
     },
     "packages/hono": {
       "name": "@spectrum-ts/hono",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "devDependencies": {
         "@spectrum-ts/core": "workspace:*",
         "@spectrum-ts/test-support": "workspace:*",
@@ -93,14 +93,14 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "hono": "^4",
         "typescript": "^5 || ^6.0.0",
       },
     },
     "packages/imessage": {
       "name": "@spectrum-ts/imessage",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "dependencies": {
         "@photon-ai/advanced-imessage": "^0.12.0",
         "@photon-ai/imessage-kit": "^3.0.0",
@@ -116,13 +116,13 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "typescript": "^5 || ^6.0.0",
       },
     },
     "packages/slack": {
       "name": "@spectrum-ts/slack",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "dependencies": {
         "@photon-ai/slack": "^0.2.0",
         "zod": "^4.2.1",
@@ -133,13 +133,13 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "typescript": "^5 || ^6.0.0",
       },
     },
     "packages/spectrum-ts": {
       "name": "spectrum-ts",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "dependencies": {
         "@spectrum-ts/core": "6.1.1",
         "@spectrum-ts/imessage": "6.1.1",
@@ -155,7 +155,7 @@
     },
     "packages/telegram": {
       "name": "@spectrum-ts/telegram",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "dependencies": {
         "@photon-ai/telegram-ts": "10.0.0",
         "marked": "^18.0.5",
@@ -167,13 +167,13 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "typescript": "^5 || ^6.0.0",
       },
     },
     "packages/terminal": {
       "name": "@spectrum-ts/terminal",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "dependencies": {
         "zod": "^4.2.1",
       },
@@ -183,7 +183,7 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "typescript": "^5 || ^6.0.0",
       },
     },
@@ -204,7 +204,7 @@
     },
     "packages/whatsapp-business": {
       "name": "@spectrum-ts/whatsapp-business",
-      "version": "6.1.1",
+      "version": "7.0.0",
       "dependencies": {
         "@photon-ai/whatsapp-business": "^0.1.1",
         "mime-types": "^3.0.1",
@@ -217,7 +217,7 @@
         "tsdown": "^0.22.2",
       },
       "peerDependencies": {
-        "@spectrum-ts/core": "^6.0.0",
+        "@spectrum-ts/core": "^7.0.0",
         "typescript": "^5 || ^6.0.0",
       },
     },
