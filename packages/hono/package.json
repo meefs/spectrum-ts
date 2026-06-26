@@ -1,6 +1,6 @@
 {
   "name": "@spectrum-ts/hono",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "description": "Hono webhook adapter for spectrum-ts.",
   "repository": {
     "type": "git",
@@ -39,7 +39,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@spectrum-ts/core": "^7.0.0",
+    "@spectrum-ts/core": "^8.0.0",
     "hono": "^4",
     "typescript": "^5 || ^6.0.0"
   },

@@ -1,6 +1,6 @@
 {
   "name": "@spectrum-ts/core",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "description": "The spectrum-ts runtime — Spectrum, content builders, fusor, and the provider authoring API.",
   "repository": {
     "type": "git",
