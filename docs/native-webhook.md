@@ -2,9 +2,13 @@
 
 Spectrum Cloud can **POST already-normalized, signed JSON** to your HTTPS
 endpoint — Spectrum's own message model (`text`, `attachment`, `contact`,
-`richlink`, `reaction`, `group`), with raw bytes and SDK methods stripped, signed
+`reaction`, `group`), with raw bytes and SDK methods stripped, signed
 with an HMAC. This is the webhook documented at
 <https://photon.codes/docs/webhooks>.
+
+A received link arrives as `text`: `richlink` is outbound-only, so an inbound URL
+is normalized to its URL string and deserialized as plain `text` rather than a
+`richlink` payload.
 
 It's a different wire format from the [Fusor webhook](./fusor.md#webhook-mode--appwebhook),
 which relays a **raw** provider request inside a protobuf envelope. You don't pick
