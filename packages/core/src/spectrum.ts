@@ -214,6 +214,15 @@ function bootstrapTelemetry(opts: {
     endpoint: PHOTON_OTEL_ENDPOINT,
     headers,
     resourceAttributes,
+    // Never monkeypatch the consumer's global fetch: it would wrap their own
+    // unrelated outbound requests in spans and inject trace headers into them.
+    // Spectrum only traces its own operations via withSpan / tracedFetch.
+    instrumentFetch: false,
+    // Scoped mode: build our OTLP providers but hold them privately instead of
+    // registering them as the process-global tracer/logger providers, so a
+    // consumer's own OpenTelemetry is never clobbered (global registration is
+    // first-writer-wins). withSpan / createLogger / tracedFetch resolve them.
+    register: false,
   });
 }
 
