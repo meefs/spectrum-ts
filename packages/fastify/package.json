@@ -1,6 +1,6 @@
 {
   "name": "@spectrum-ts/fastify",
-  "version": "8.2.0",
+  "version": "8.2.1",
   "description": "Fastify webhook adapter for spectrum-ts.",
   "repository": {
     "type": "git",
