@@ -16,6 +16,12 @@ import type { ContentBuilder } from "./types";
  * universal sugar that delegates here. Per-platform constraints (e.g.
  * group-only, remote-only) surface as `UnsupportedError` from the provider's
  * `send` action so the canonical and sugar forms share one error path.
+ *
+ * Bidirectional: providers also surface platform icon changes as inbound
+ * `Message`s carrying this content — `action.kind === "set"` arrives with
+ * the fetched icon behind `read()`, `"clear"` mirrors icon removal.
+ * `message.sender` is the user who changed it (may be `undefined` when the
+ * platform recorded no actor).
  */
 export const avatarSchema = z.object({
   type: z.literal("avatar"),
@@ -25,6 +31,16 @@ export const avatarSchema = z.object({
 export type Avatar = z.infer<typeof avatarSchema>;
 
 export type AvatarInput = PhotoInput;
+
+/**
+ * The current chat avatar as returned by `space.getAvatar()`: raw image bytes
+ * plus MIME type. `data` is a Buffer so the value round-trips into the
+ * setter — `space.avatar(res.data, { mimeType: res.mimeType })`.
+ */
+export interface AvatarData {
+  data: Buffer;
+  mimeType: string;
+}
 
 /**
  * Build an `Avatar` content value.

@@ -6,12 +6,14 @@ import {
 import { IMessageSDK } from "@photon-ai/imessage-kit";
 import { withSpan } from "@photon-ai/otel";
 import {
+  type AddMember,
   type App,
   type Attachment,
   type Avatar,
   type Content,
   definePlatform,
   type Edit,
+  type RemoveMember,
   type Rename,
   type Space,
   type StreamText,
@@ -58,11 +60,16 @@ import {
   send as localSend,
 } from "./local/api";
 import {
+  addParticipants as remoteAddParticipants,
   editMessage as remoteEditMessage,
+  getIcon as remoteGetIcon,
   getMessage as remoteGetMessage,
+  leaveGroup as remoteLeaveGroup,
+  listParticipants as remoteListParticipants,
   markRead as remoteMarkRead,
   messages as remoteMessages,
   reactToMessage as remoteReactToMessage,
+  removeParticipants as remoteRemoveParticipants,
   replyToMessage as remoteReplyToMessage,
   send as remoteSend,
   sendCustomizedMiniApp as remoteSendCustomizedMiniApp,
@@ -353,6 +360,65 @@ const handleAvatar = async (
   }
   const remote = clientForPhone(client, space.phone);
   await remoteSetIcon(remote, space.id, content);
+};
+
+/**
+ * Shared guard for the membership handlers: remote-only, group-only, then
+ * per-phone client resolution. Mirrors the `handleRename` / `handleAvatar`
+ * guard sequence.
+ */
+const remoteGroupClient = (
+  client: IMessageClient,
+  space: { id: string; phone: string; type: "dm" | "group" },
+  action: string,
+  detail: { dm: string; local: string }
+): AdvancedIMessage => {
+  if (isLocal(client)) {
+    throw UnsupportedError.action(
+      action,
+      "iMessage (local mode)",
+      detail.local
+    );
+  }
+  if (space.type !== "group") {
+    throw UnsupportedError.action(action, "iMessage", detail.dm);
+  }
+  return clientForPhone(client, space.phone);
+};
+
+const handleAddMember = async (
+  client: IMessageClient,
+  space: { id: string; phone: string; type: "dm" | "group" },
+  content: AddMember
+): Promise<void> => {
+  const remote = remoteGroupClient(client, space, "addMember", {
+    dm: "only group chats can add members (this space is a DM — iMessage cannot convert a DM into a group; create a group via space.create instead)",
+    local: "adding members requires remote iMessage",
+  });
+  await remoteAddParticipants(remote, space.id, content);
+};
+
+const handleRemoveMember = async (
+  client: IMessageClient,
+  space: { id: string; phone: string; type: "dm" | "group" },
+  content: RemoveMember
+): Promise<void> => {
+  const remote = remoteGroupClient(client, space, "removeMember", {
+    dm: "only group chats can remove members (this space is a DM — iMessage cannot convert a DM into a group; create a group via space.create instead)",
+    local: "removing members requires remote iMessage",
+  });
+  await remoteRemoveParticipants(remote, space.id, content);
+};
+
+const handleLeaveSpace = async (
+  client: IMessageClient,
+  space: { id: string; phone: string; type: "dm" | "group" }
+): Promise<void> => {
+  const remote = remoteGroupClient(client, space, "leaveSpace", {
+    dm: "only group chats can be left (this space is a DM)",
+    local: "leaving chats requires remote iMessage",
+  });
+  await remoteLeaveGroup(remote, space.id);
 };
 
 /**
@@ -650,6 +716,18 @@ export const imessage = definePlatform("iMessage", {
       await handleAvatar(client, space, content);
       return;
     }
+    if (content.type === "addMember") {
+      await handleAddMember(client, space, content);
+      return;
+    }
+    if (content.type === "removeMember") {
+      await handleRemoveMember(client, space, content);
+      return;
+    }
+    if (content.type === "leaveSpace") {
+      await handleLeaveSpace(client, space);
+      return;
+    }
     if (content.type === "read") {
       // Chat-level granularity: `chats.markRead(chatGuid)` marks every
       // unread message in the chat — `content.target` only identifies the
@@ -688,6 +766,26 @@ export const imessage = definePlatform("iMessage", {
       }
       const remote = clientForPhone(client, space.phone);
       return remoteGetMessage(remote, space.id, messageId, space.phone);
+    },
+    // List a remote group chat's current participants. Remote + group only;
+    // the agent's own number is excluded. `id` is the canonical address
+    // (E.164 phone or email); `address`/`country`/`service` ride along per
+    // `userSchema`.
+    getMembers: async ({ client }, space) => {
+      const remote = remoteGroupClient(client, space, "getMembers", {
+        dm: "only group chats support listing members (this space is a DM)",
+        local: "listing members requires remote iMessage",
+      });
+      return await remoteListParticipants(remote, space.id, space.phone);
+    },
+    // Download the group chat's current icon; `undefined` when none is set.
+    // Remote + group only — mirrors the avatar setter's guards.
+    getAvatar: async ({ client }, space) => {
+      const remote = remoteGroupClient(client, space, "getAvatar", {
+        dm: "only group chats have avatars (this space is a DM)",
+        local: "fetching group avatars requires remote iMessage",
+      });
+      return await remoteGetIcon(remote, space.id);
     },
     // Fetch an attachment by GUID. Returns a spectrum `Attachment` whose
     // `.read()` / `.stream()` lazily download the bytes — calling both

@@ -1,10 +1,22 @@
+import type { AvatarData } from "../content/avatar";
+import type { MemberInput } from "../content/membership";
 import type { Reaction, ReactionBuilder } from "../content/reaction";
 import type { ContentInput } from "../content/types";
 import type { Message } from "./message";
-import type { AgentSender } from "./user";
+import type { AgentSender, User } from "./user";
 
 export interface Space<_Def = unknown> {
   readonly __platform: string;
+  /**
+   * Add members to the current chat. Sugar for `send(addMember(users))`.
+   * Accepts a single `User` or id string, or an array of either — batches
+   * land in one provider call. Fire-and-forget.
+   *
+   * Universal API; per-platform constraints (e.g. iMessage: remote + group
+   * only — a DM cannot be converted, create a group via `space.create`)
+   * surface as `UnsupportedError` from the provider's send action.
+   */
+  add(users: MemberInput): Promise<void>;
   /**
    * Set or clear the current chat's avatar (group icon). Sugar for
    * `send(avatar(input, options?))`.
@@ -30,6 +42,30 @@ export interface Space<_Def = unknown> {
    */
   edit(message: Message | undefined, newContent: ContentInput): Promise<void>;
   /**
+   * Download the current chat avatar (group icon). Resolves `undefined` when
+   * the chat has none. The result round-trips into the setter:
+   * `space.avatar(res.data, { mimeType: res.mimeType })`.
+   *
+   * Universal API; per-platform constraints (e.g. iMessage: remote + group
+   * only — a DM throws) surface as `UnsupportedError`, as do platforms with
+   * no implementation.
+   */
+  getAvatar(): Promise<AvatarData | undefined>;
+  /**
+   * List the chat's current participants, excluding the agent's own account
+   * where the platform can identify it. Each entry is a `User` tagged with
+   * `__platform`; `id` is the user's canonical platform handle (the same
+   * format `space.create` accepts), so results feed straight back into
+   * `add()` / `remove()` / `space.create()`. Platform extras (e.g.
+   * iMessage's `address`/`country`/`service`) ride along untyped — use the
+   * platform instance's `getMembers(space)` for typed extras.
+   *
+   * Universal API; per-platform constraints (e.g. iMessage: remote + group
+   * only — a DM throws) surface as `UnsupportedError`, as do platforms with
+   * no implementation.
+   */
+  getMembers(): Promise<User[]>;
+  /**
    * Look up a message in this space by its id. Returns `undefined` if the
    * platform has no way to resolve the id (e.g. cache miss with no by-id
    * SDK fallback). Used to materialize a `Message` for APIs that require one,
@@ -37,6 +73,14 @@ export interface Space<_Def = unknown> {
    */
   getMessage(id: string): Promise<Message | undefined>;
   readonly id: string;
+  /**
+   * Leave the current chat with the agent's own account. Sugar for
+   * `send(leaveSpace())`. Fire-and-forget.
+   *
+   * Universal API; per-platform constraints (e.g. iMessage: remote + group
+   * only) surface as `UnsupportedError` from the provider's send action.
+   */
+  leave(): Promise<void>;
   /**
    * Mark the conversation as read up to `message`, surfacing a read receipt
    * to the sender where the platform supports one. Sugar for
@@ -50,6 +94,15 @@ export interface Space<_Def = unknown> {
    * everywhere — same contract as `startTyping()`.
    */
   read(message: Message): Promise<void>;
+  /**
+   * Remove members from the current chat. Sugar for
+   * `send(removeMember(users))`. Accepts the same input shapes as `add`.
+   * Fire-and-forget.
+   *
+   * Universal API; per-platform constraints (e.g. iMessage: remote + group
+   * only) surface as `UnsupportedError` from the provider's send action.
+   */
+  remove(users: MemberInput): Promise<void>;
   /**
    * Rename the current chat. Sugar for `send(rename(displayName))`.
    *

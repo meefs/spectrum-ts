@@ -37,19 +37,29 @@ export {
 } from "@photon-ai/otel";
 // Content factories, schemas, and the inbound-record type (from `content/`).
 export { asAttachment } from "./content/attachment";
+export { avatarSchema } from "./content/avatar";
 export { asContact } from "./content/contact";
 export { asCustom } from "./content/custom";
 export { messageEffectSchema } from "./content/effect";
 export { asGroup, groupSchema } from "./content/group";
 export { asMarkdown } from "./content/markdown";
+export {
+  addMemberSchema,
+  leaveSpaceSchema,
+  removeMemberSchema,
+} from "./content/membership";
 export { asPoll, asPollOption } from "./content/poll";
 export { asReaction, reactionSchema } from "./content/reaction";
 export { asRead } from "./content/read";
+export { renameSchema } from "./content/rename";
 export { asReply, replySchema } from "./content/reply";
 export { asRichlink } from "./content/richlink";
 export { asText } from "./content/text";
 export { asVoice } from "./content/voice";
-export type { ProviderMessageRecord } from "./platform/types";
+export type {
+  ProviderMessageRecord,
+  ProviderUserRecord,
+} from "./platform/types";
 // Generic translation helpers (from `utils/`).
 export { ensureM4a } from "./utils/audio";
 // Outbound-HTTP tracing — wrap a provider's own fetch so its requests get a

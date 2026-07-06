@@ -10,7 +10,12 @@ export {
   type AttachmentInput,
   attachment,
 } from "./content/attachment";
-export { type Avatar, type AvatarInput, avatar } from "./content/avatar";
+export {
+  type Avatar,
+  type AvatarData,
+  type AvatarInput,
+  avatar,
+} from "./content/avatar";
 export {
   type Contact,
   type ContactAddress,
@@ -26,6 +31,15 @@ export { custom } from "./content/custom";
 export { type Edit, edit } from "./content/edit";
 export { type Group, group } from "./content/group";
 export { type Markdown, markdown } from "./content/markdown";
+export {
+  type AddMember,
+  addMember,
+  type LeaveSpace,
+  leaveSpace,
+  type MemberInput,
+  type RemoveMember,
+  removeMember,
+} from "./content/membership";
 export {
   option,
   type Poll,
