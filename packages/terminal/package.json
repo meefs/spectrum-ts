@@ -1,7 +1,7 @@
 {
   "name": "@spectrum-ts/terminal",
-  "version": "8.2.1",
-  "description": "Terminal (tuichat) provider for spectrum-ts \u2014 chat with your agent from the command line.",
+  "version": "8.2.2",
+  "description": "Terminal (tuichat) provider for spectrum-ts — chat with your agent from the command line.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/photon-hq/spectrum-ts.git",

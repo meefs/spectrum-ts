@@ -1,7 +1,7 @@
 {
   "name": "spectrum-ts",
-  "version": "8.2.1",
-  "description": "Bring agents to any interface \u2014 unified messaging SDK for TypeScript. Batteries-included: the runtime plus every official provider.",
+  "version": "8.2.2",
+  "description": "Bring agents to any interface — unified messaging SDK for TypeScript. Batteries-included: the runtime plus every official provider.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/photon-hq/spectrum-ts.git",
@@ -72,12 +72,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@spectrum-ts/core": "8.2.1",
-    "@spectrum-ts/imessage": "8.2.1",
-    "@spectrum-ts/slack": "8.2.1",
-    "@spectrum-ts/telegram": "8.2.1",
-    "@spectrum-ts/terminal": "8.2.1",
-    "@spectrum-ts/whatsapp-business": "8.2.1"
+    "@spectrum-ts/core": "8.2.2",
+    "@spectrum-ts/imessage": "8.2.2",
+    "@spectrum-ts/slack": "8.2.2",
+    "@spectrum-ts/telegram": "8.2.2",
+    "@spectrum-ts/terminal": "8.2.2",
+    "@spectrum-ts/whatsapp-business": "8.2.2"
   },
   "devDependencies": {
     "@spectrum-ts/test-support": "workspace:*",

@@ -1,6 +1,6 @@
 {
   "name": "@spectrum-ts/hono",
-  "version": "8.2.1",
+  "version": "8.2.2",
   "description": "Hono webhook adapter for spectrum-ts.",
   "repository": {
     "type": "git",
