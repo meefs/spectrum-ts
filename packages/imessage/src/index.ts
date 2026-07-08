@@ -62,6 +62,7 @@ import {
 import {
   addParticipants as remoteAddParticipants,
   editMessage as remoteEditMessage,
+  getDisplayName as remoteGetDisplayName,
   getIcon as remoteGetIcon,
   getMessage as remoteGetMessage,
   leaveGroup as remoteLeaveGroup,
@@ -786,6 +787,15 @@ export const imessage = definePlatform("iMessage", {
         local: "fetching group avatars requires remote iMessage",
       });
       return await remoteGetIcon(remote, space.id);
+    },
+    // Read a group chat's title. Group-only, remote only — mirrors the other
+    // group reads (`getAvatar`, `getMembers`) via `remoteGroupClient`.
+    getDisplayName: async ({ client }, space) => {
+      const remote = remoteGroupClient(client, space, "getDisplayName", {
+        dm: "only group chats have display names (this space is a DM)",
+        local: "reading chat display names requires remote iMessage",
+      });
+      return await remoteGetDisplayName(remote, space.id);
     },
     // Fetch an attachment by GUID. Returns a spectrum `Attachment` whose
     // `.read()` / `.stream()` lazily download the bytes — calling both
