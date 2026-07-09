@@ -10,6 +10,10 @@ const teamMetadataSchema = z.object({
 });
 
 const directConfig = z.object({
+  // Falls back to `SPECTRUM_SLACK_ENDPOINT` when omitted (explicit config wins),
+  // applied automatically by `definePlatform` from the platform id. `tokens` is a
+  // record, so it stays code-only — direct mode still requires it, which means an
+  // env endpoint alone never flips the union into direct mode.
   endpoint: z.string().optional(),
   teams: z.record(z.string(), teamMetadataSchema).optional(),
   tokens: z
