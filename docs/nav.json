@@ -46,6 +46,7 @@
       "group": "Providers",
       "pages": [
         "spectrum-ts/providers",
+        "spectrum-ts/providers/voice",
         {
           "group": "iMessage",
           "icon": "comment",

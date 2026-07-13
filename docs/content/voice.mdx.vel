@@ -5,6 +5,11 @@ description: "Send voice notes with audio metadata and provider fallbacks."
 
 Use `voice()` to send a voice note. It uses the same input shape as `attachment`: a path or a `Buffer` plus optional metadata.
 
+<Note>
+  This page covers audio clips sent inside messages. To place or receive a live
+  call, see [Voice calls over SIP](/spectrum-ts/providers/voice).
+</Note>
+
 ```ts
 import { voice } from "spectrum-ts";
 

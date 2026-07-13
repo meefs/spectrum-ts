@@ -23,11 +23,14 @@ A user might message you in iMessage today, WhatsApp tomorrow, and your app next
 
 With Spectrum, you run one agent server and add providers for the interfaces you want to support. Each provider connects a native interface to the same Spectrum API, so your agent can feel consistent everywhere.
 
-Today, Spectrum supports iMessage, WhatsApp Business, Telegram, Slack, and terminal development. The same model is built for more interfaces over time: Discord, websites, apps, phone calls, meetings, and hardware like HomePod.
+Today, Spectrum supports iMessage, WhatsApp Business, Telegram, Slack, terminal
+development, and SIP voice calls on iMessage lines and WhatsApp numbers. The
+same model is built for more interfaces over time: Discord, websites, apps,
+voice-only lines, meetings, and hardware like HomePod.
 
 ## Supported interfaces today
 
-Spectrum currently includes official providers for:
+Spectrum currently supports these interfaces and development surfaces:
 
 <CardGroup cols={2}>
   <Card title="iMessage" icon="comment" href="/spectrum-ts/providers/imessage">
@@ -44,6 +47,9 @@ Spectrum currently includes official providers for:
   </Card>
   <Card title="Terminal" icon="terminal" href="/spectrum-ts/providers/terminal">
     Build, test, and demo agents from your local terminal.
+  </Card>
+  <Card title="Voice calls" icon="phone" href="/spectrum-ts/providers/voice">
+    Place and receive calls over SIP using iMessage lines or WhatsApp numbers.
   </Card>
 </CardGroup>
 
@@ -124,6 +130,9 @@ You do not have to manage Spectrum only from the dashboard. Use the dashboard fo
   </Card>
   <Card title="Webhooks" icon="webhook" href="/spectrum-ts/webhooks">
     Receive messages via HTTP with native and Fusor webhook support, plus Hono, Express, and Elysia adapters.
+  </Card>
+  <Card title="Voice calls" icon="phone" href="/spectrum-ts/providers/voice">
+    Configure inbound and outbound calling over SIP with TCP transport.
   </Card>
   <Card title="Build a custom platform" icon="blocks" href="/spectrum-ts/custom-platforms">
     Add a new interface with Spectrum's provider model.

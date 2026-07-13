@@ -3,9 +3,17 @@ title: "Providers"
 description: "Choose, configure, and combine Spectrum platform providers."
 ---
 
-Providers plug into Spectrum's type system and runtime. Each provider exports a callable. Call `provider.config(...)` to register it, and call `provider(app)` or `provider(space)` to [narrow](/spectrum-ts/platform-narrowing) into its platform-specific instance.
+SDK providers plug into Spectrum's type system and runtime. Each SDK provider
+exports a callable. Call `provider.config(...)` to register it, and call
+`provider(app)` or `provider(space)` to
+[narrow](/spectrum-ts/platform-narrowing) into its platform-specific instance.
 
-## Built-in providers
+## Platform and provider guides
+
+Most platforms connect through a provider package registered with `config()`.
+Voice calls currently connect directly over SIP; the Voice guide lives here
+because it is a platform integration, while SDK call control is still on the
+roadmap.
 
 <CardGroup cols={2}>
   <Card title="iMessage" icon="comment" href="/spectrum-ts/providers/imessage">
@@ -16,6 +24,9 @@ Providers plug into Spectrum's type system and runtime. Each provider exports a 
   </Card>
   <Card title="WhatsApp Business" icon="whatsapp" href="/spectrum-ts/providers/whatsapp-business">
     Use the official WhatsApp Business Cloud API for 1:1 customer conversations.
+  </Card>
+  <Card title="Voice" icon="phone" href="/spectrum-ts/providers/voice">
+    Place and receive calls over SIP using an iMessage line or WhatsApp number.
   </Card>
   <Card title="Telegram" icon="paper-plane" href="/spectrum-ts/providers/telegram">
     Use the Telegram Bot API with Fusor webhooks, media, reactions, replies, typing, and edits.
