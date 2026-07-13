@@ -252,6 +252,23 @@ const sent = await space.send(customizedMiniApp({
 
 `appStoreId` is optional. Omit it to send a card whose extension isn't published on the App Store. When set, recipients without the extension are directed to its App Store entry.
 
+Set `live: true` when you want Messages to render the installed extension's live UI instead of only showing the static layout preview:
+
+```ts
+const sent = await space.send(customizedMiniApp({
+  appName: "My App",
+  extensionBundleId: "com.example.myapp.imessage",
+  live: true,
+  teamId: "ABCDE12345",
+  url: "https://example.com/live",
+  layout: {
+    caption: "Open live dashboard",
+  },
+}));
+```
+
+The recipient must have the matching iMessage extension installed. Omit `live`, or set it to `false`, to keep the static layout preview.
+
 <AccordionGroup>
   <Accordion title="CustomizedMiniAppInput" description="Fields for building a mini-app card.">
     | Field | Type | Description |
@@ -260,6 +277,7 @@ const sent = await space.send(customizedMiniApp({
     | `appStoreId` | `number` (optional) | Apple App Store numeric ID. Omit for unpublished extensions. |
     | `extensionBundleId` | `string` | Bundle identifier of the iMessage extension target. |
     | `layout` | `CustomizedMiniAppLayout` | Visible card layout. See below. |
+    | `live` | `boolean` (optional) | Render the installed extension's live UI when `true`. Omit for the static layout preview. |
     | `teamId` | `string` | 10-character uppercase alphanumeric Apple Team ID. |
     | `url` | `string` | Absolute URL delivered to the installed extension on tap. |
   </Accordion>
@@ -278,6 +296,40 @@ const sent = await space.send(customizedMiniApp({
     At least one of `caption`, `subcaption`, `trailingCaption`, `trailingSubcaption`, or `image` must be set.
   </Accordion>
 </AccordionGroup>
+
+### Update a customized mini-app card
+
+Keep the message returned by the original send and use it as the target of `edit()`. The following example updates the card's URL, caption, and rendering mode without sending a new bubble:
+
+```ts
+import { edit } from "spectrum-ts";
+import { customizedMiniApp } from "spectrum-ts/providers/imessage";
+
+const cardIdentity = {
+  appName: "My App",
+  extensionBundleId: "com.example.myapp.imessage",
+  teamId: "ABCDE12345",
+};
+
+const card = await space.send(customizedMiniApp({
+  ...cardIdentity,
+  url: "https://example.com/order/123",
+  layout: {
+    caption: "Preparing order",
+  },
+}));
+
+await space.send(edit(customizedMiniApp({
+  ...cardIdentity,
+  live: true,
+  url: "https://example.com/order/123?status=ready",
+  layout: {
+    caption: "Ready for pickup",
+  },
+}), card));
+```
+
+`card` includes the `miniAppCardSession` metadata required for the update. Spectrum manages and refreshes that session automatically, so reuse `card` for later updates instead of constructing the metadata yourself. The edit operation returns `undefined`.
 
 <Note>
   Mini-app cards require `@spectrum-ts/imessage`. With

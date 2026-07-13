@@ -1,9 +1,13 @@
 ---
 title: "App"
-description: "Send a URL as a tappable app card, delivered on iMessage through the Spectrum Mini App."
+description: "Send and update a tappable app card, with optional live rendering on supported platforms."
 ---
 
-Use `app()` to send a URL as an app card. On iMessage, the card renders as an iMessage mini app: recipients tap it to open the link directly inside Messages, with no browser. It's delivered through the [Spectrum Mini App](https://apps.apple.com/ca/app/spectrum-by-photon/id6777616651), Photon's Apple-approved mini-app launcher. On Slack, Telegram, WhatsApp, and terminal, it falls back to the plain URL.
+Use `app()` when you want to present a URL as a tappable card instead of an inline link.
+
+## Send an app card
+
+Pass the destination URL to `app()` and send it like any other content:
 
 ```ts
 import { app } from "spectrum-ts";
@@ -11,12 +15,72 @@ import { app } from "spectrum-ts";
 await space.send(app("https://example.com/deep-link"));
 ```
 
-Use `app()` when you want to present a link as a tappable card rather than an inline URL.
+On iMessage, the recipient gets a native mini-app card. On Slack, Telegram, WhatsApp, and terminal, Spectrum sends the URL using that platform's normal link behavior.
 
-## iMessage App
+## Show the app's live UI
+
+Pass `{ live: true }` as the second argument to ask supported platforms to render the installed app extension's live UI:
+
+```ts
+import { app } from "spectrum-ts";
+
+await space.send(
+  app("https://example.com/dashboard", {
+    live: true,
+  })
+);
+```
+
+When `live` is omitted, iMessage shows the card's static URL preview. Platforms without a live app surface ignore the option and keep their normal URL fallback.
+
+<Note>
+  `live` is a rendering hint. The recipient needs a supported platform and the
+  corresponding app extension for its live UI to appear.
+</Note>
+
+## Update an app card in place
+
+An iMessage app card sent through `@spectrum-ts/imessage` can be updated without sending a second bubble. Keep the message returned by the original send, then pass it to `edit()`:
+
+```ts
+import { app, edit } from "spectrum-ts";
+
+const card = await space.send(
+  app("https://example.com/order/123", {
+    live: true,
+  })
+);
+
+await space.send(
+  edit(
+    app("https://example.com/order/123?status=shipped", {
+      live: true,
+    }),
+    card
+  )
+);
+```
+
+The recipient sees the existing card update in place. You can change its URL, generated layout, and live-rendering option.
+
+Keep using `card` for later updates. `space.send(edit(...))` resolves to `undefined`; it does not return a replacement message.
+
+<Note>
+  In-place app-card updates require `@spectrum-ts/imessage`. They are not
+  available through `@spectrum-ts/imessage-local` or the URL fallbacks on other
+  providers.
+</Note>
+
+### How update sessions work
+
+A successful iMessage mini-app send returns an iMessage message with `miniAppCardSession` metadata. Spectrum passes this session back to iMessage when you call `edit()` and refreshes it after each successful update.
+
+Most applications should treat `miniAppCardSession` as provider-managed metadata: keep the original returned message and let Spectrum use it. A message without this metadata cannot identify an existing mini-app card to update.
+
+## How iMessage delivers app cards
 
 On iMessage, app cards open inside the [Spectrum Mini App](https://apps.apple.com/ca/app/spectrum-by-photon/id6777616651), a mini-app launcher approved by Apple. Recipients download it once on first use (they can download it directly inside the Messages app); after that, every app card you send opens directly in Messages without leaving the conversation.
 
 The launcher keeps a library of every mini app a recipient has opened, so they can reopen those apps later or share them with friends.
 
-For customized iMessage app with layout control, see [Mini-app cards](/spectrum-ts/providers/imessage/messaging-features#mini-app-cards).
+For an iMessage extension with its own identity and layout control, see [Customized mini-app cards](/spectrum-ts/providers/imessage/messaging-features#mini-app-cards).
