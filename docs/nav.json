@@ -46,7 +46,15 @@
       "group": "Providers",
       "pages": [
         "spectrum-ts/providers",
-        "spectrum-ts/providers/voice",
+        {
+          "group": "Voice",
+          "icon": "phone",
+          "root": "spectrum-ts/providers/voice",
+          "pages": [
+            "spectrum-ts/providers/voice/outbound-calls",
+            "spectrum-ts/providers/voice/inbound-calls"
+          ]
+        },
         {
           "group": "iMessage",
           "icon": "comment",

@@ -24,8 +24,8 @@ A user might message you in iMessage today, WhatsApp tomorrow, and your app next
 With Spectrum, you run one agent server and add providers for the interfaces you want to support. Each provider connects a native interface to the same Spectrum API, so your agent can feel consistent everywhere.
 
 Today, Spectrum supports iMessage, WhatsApp Business, Telegram, Slack, terminal
-development, and SIP voice calls on iMessage lines and WhatsApp numbers. The
-same model is built for more interfaces over time: Discord, websites, apps,
+development, and SIP voice calls on iMessage lines. The same model is built for
+more interfaces over time: Discord, websites, apps,
 voice-only lines, meetings, and hardware like HomePod.
 
 ## Supported interfaces today
@@ -49,7 +49,7 @@ Spectrum currently supports these interfaces and development surfaces:
     Build, test, and demo agents from your local terminal.
   </Card>
   <Card title="Voice calls" icon="phone" href="/spectrum-ts/providers/voice">
-    Place and receive calls over SIP using iMessage lines or WhatsApp numbers.
+    Place and receive calls over SIP using Spectrum iMessage lines.
   </Card>
 </CardGroup>
 

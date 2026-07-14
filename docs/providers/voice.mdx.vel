@@ -1,185 +1,94 @@
 ---
 title: "Voice"
-description: "Configure inbound and outbound Spectrum voice calls with a SIP client."
+description: "Add inbound and outbound voice calls to a Spectrum iMessage line over SIP."
 ---
 
-Spectrum Voice connects your SIP application, PBX, or voice agent to calls on
-your Spectrum lines. Both inbound and outbound calls are supported.
+Spectrum Voice lets a SIP application, PBX, or voice agent place and receive
+live calls through a Spectrum iMessage line.
 
 <Note>
-  This page covers live phone calls. To send an audio clip inside a message,
-  use the [`voice()` content builder](/spectrum-ts/content/voice) instead.
+  This guide is about live calls. To send an audio recording inside a message,
+  use the [`voice()` content builder](/spectrum-ts/content/voice).
 </Note>
 
-## Availability
+## What is supported
 
-| Capability | Current status |
+| Capability | Status |
 |---|---|
+| Outbound calls | Supported |
 | Inbound calls | Supported |
-| Outbound calls | Supported after business profile registration |
 | iMessage lines | Supported |
-| WhatsApp numbers | Supported |
+| WhatsApp numbers | Not supported |
 | Voice-only ("pure voice") lines | Coming soon |
-| SIP integration | Supported |
-| Webhook integration | Coming soon |
-| `spectrum-ts` SDK integration | Coming soon |
-| SIP over TCP | Supported |
-| SIP over TLS | Coming soon |
+| SIP | Supported |
+| Webhooks | Coming soon |
+| `spectrum-ts` SDK call control | Coming soon |
+| TCP transport | Supported |
+| UDP or TLS transport | Not supported |
 
 <Warning>
-  Use SIP over **TCP**. TLS transport and `sips:` connections are not supported
-  yet. Webhooks and the Spectrum TypeScript SDK do not currently expose voice
-  call control; connect through SIP instead.
+  Configure your SIP application to use **TCP**. Spectrum Voice does not
+  currently accept UDP, TLS, or `sips:` connections.
 </Warning>
 
-## Before you start
+## Choose a setup path
 
-You need:
+Inbound and outbound calling are configured separately. Set up one or both,
+depending on what your application needs.
 
-- A [Spectrum dashboard](https://app.photon.codes) account and project.
-- An iMessage line or WhatsApp number associated with that project.
-- A SIP client, PBX, or voice application that supports TCP transport.
-- The project's ID and secret. You can find both in the project's settings in
-  the dashboard.
+<CardGroup cols={2}>
+  <Card title="Outbound calls" icon="phone-outgoing" href="/spectrum-ts/providers/voice/outbound-calls">
+    Configure SIP credentials and place calls from your iMessage line.
+  </Card>
+  <Card title="Inbound calls" icon="phone-incoming" href="/spectrum-ts/providers/voice/inbound-calls">
+    Register inbound routing in the dashboard and receive calls in your SIP application.
+  </Card>
+</CardGroup>
 
-For outbound calls, you must also register a business profile. Registration is
-free and usually takes **1–2 business days** to complete. Submit it before your
-planned launch so the review does not block outbound calling.
+## Quick reference
 
-## Configure outbound calls
+For outbound calls, configure your SIP application with these values:
 
-<Steps>
-  <Step title="Register your business profile">
-    Open the [Spectrum dashboard](https://app.photon.codes), select the project
-    that will place calls, and complete its business profile registration.
+| Setting | Value |
+|---|---|
+| SIP server or URI | `sip.spectrum.photon.codes` |
+| Username | Your Spectrum project ID |
+| Password | Your Spectrum project secret |
+| Transport | `TCP` |
 
-    Submit accurate business information, then wait until registration is
-    complete before testing outbound calls. Review usually takes 1–2 business
-    days. There is no fee to register the business profile.
-  </Step>
-  <Step title="Copy the project credentials">
-    Open the project's settings and copy its **project ID** and **project
-    secret**. The project ID is the SIP username, and the project secret is the
-    SIP password.
+You can find the project ID and project secret in your project settings in the
+[Spectrum dashboard](https://app.photon.codes).
 
-    Treat the project secret like any production credential. Store it in a
-    secret manager or environment variable rather than committing it to source
-    control.
-  </Step>
-  <Step title="Configure your SIP client">
-    Create a SIP account or trunk with the following values:
+For inbound calls, register the inbound route in the dashboard. The dashboard
+connects the iMessage line to your SIP application.
 
-    | SIP setting | Value |
-    |---|---|
-    | Server or URI | `sip.spectrum.photon.codes` |
-    | Username | Your Spectrum project ID |
-    | Password | Your Spectrum project secret |
-    | Transport | `TCP` |
+## Business profile registration
 
-    SIP products use different names for the same fields. For example, the
-    server field may be labeled **SIP URI**, **domain**, **registrar**, or
-    **proxy**. Always use `sip.spectrum.photon.codes` for the Spectrum SIP host
-    and select TCP explicitly.
+A business profile is **not required** to place an outbound call. You can start
+building and testing before it is registered.
 
-    A typical environment-based configuration looks like this:
+However, outbound calls from an unregistered business may be flagged. For
+production traffic, we recommend registering the business profile in the
+dashboard. Registration is free and usually takes **1–2 business days**.
 
-    ```bash
-    SPECTRUM_SIP_URI=sip.spectrum.photon.codes
-    SPECTRUM_SIP_USERNAME=your-project-id
-    SPECTRUM_SIP_PASSWORD=your-project-secret
-    SPECTRUM_SIP_TRANSPORT=tcp
-    ```
-  </Step>
-  <Step title="Connect and authenticate">
-    Start the SIP client and confirm that it connects to
-    `sip.spectrum.photon.codes` over TCP. If authentication fails, verify that
-    the username is the project ID—not the project name—and that the password
-    is the project secret from the same project.
-  </Step>
-  <Step title="Place a test call">
-    Confirm that the intended iMessage line or WhatsApp number belongs to the
-    authenticated project, then place an outbound call through your SIP
-    application. Check both call setup and two-way audio before sending
-    production traffic.
-  </Step>
-</Steps>
+<Note>
+  Business profile registration and inbound route registration are different:
 
-## Configure inbound calls
+  - A **business profile** is optional and relates to outbound calling.
+  - An **inbound route** is required if you want to receive calls.
+</Note>
 
-Inbound calling requires an inbound registration in the dashboard. SIP
-credentials alone do not configure which calls Spectrum should route to your
-application.
+## Current integration model
 
-<Steps>
-  <Step title="Open the inbound voice settings">
-    Sign in to the [Spectrum dashboard](https://app.photon.codes), select your
-    project, and open its inbound voice registration.
-  </Step>
-  <Step title="Register the inbound route">
-    Register inbound calling for the iMessage line or WhatsApp number you want
-    to receive calls on. Complete the SIP routing information requested by the
-    dashboard and save the registration.
-  </Step>
-  <Step title="Prepare your SIP application">
-    Configure your SIP application to accept inbound calls over TCP and keep
-    its SIP connection active. Do not configure TLS or a `sips:` URI.
-  </Step>
-  <Step title="Test the route">
-    Call the registered line or number from another phone. Confirm that the
-    inbound call reaches your SIP application and that audio works in both
-    directions.
-  </Step>
-</Steps>
+Voice is documented as a provider because it is a communication platform, but
+it does not yet use a `voice.config()` SDK provider.
 
-## Production checklist
+Today, your application connects directly through SIP:
 
-Before going live, verify all of the following:
+- Use SIP over TCP for inbound and outbound calls.
+- Use the dashboard to manage the project, business profile, line, and inbound
+  route.
+- Do not expect voice calls in `app.messages` or `app.webhook()`.
 
-- The business profile shows as fully registered for outbound calling.
-- The SIP username is the project ID and the password is the project secret.
-- The SIP host is exactly `sip.spectrum.photon.codes`.
-- The SIP transport is TCP, not UDP or TLS.
-- The calling line is an iMessage line or WhatsApp number in the same project.
-- Inbound calling is registered separately in the dashboard.
-- Both inbound and outbound test calls have working two-way audio.
-
-## Troubleshooting
-
-### The SIP client cannot connect
-
-Confirm the host is `sip.spectrum.photon.codes` and force the transport to TCP.
-Some SIP clients default to UDP or automatically try TLS; neither transport is
-currently supported by Spectrum Voice.
-
-### Authentication fails
-
-Use the **project ID** as the username and the **project secret** as the
-password. Make sure both values came from the same project. If the secret was
-rotated, update the SIP client with the new value.
-
-### Outbound calls fail
-
-Check that the project's business profile has finished registering. Submission
-alone is not enough; registration usually takes 1–2 business days. Also verify
-that the source is a supported iMessage line or WhatsApp number owned by the
-project.
-
-### Inbound calls do not reach the application
-
-Confirm that inbound calling is registered for the correct line or number in
-the dashboard. Then verify that the SIP application is connected and accepting
-calls over TCP.
-
-### I need a voice-only line, TLS, webhooks, or SDK call control
-
-These features are on the roadmap but are not available today. Current
-integrations must use an existing iMessage line or WhatsApp number and connect
-over SIP with TCP transport.
-
-## Security notes
-
-- Never expose the project secret in client-side code, logs, or a repository.
-- Rotate the project secret immediately if it is exposed, then update the SIP
-  configuration.
-- TCP SIP signaling is not protected by TLS. Evaluate this limitation against
-  your security requirements before using the integration in production.
+Webhook delivery, SDK call control, TLS transport, and voice-only lines are on
+the roadmap. No release dates are promised yet.
