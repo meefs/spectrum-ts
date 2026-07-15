@@ -133,6 +133,36 @@ If the handle the debug bot reports isn't what you expect at all, the underlying
 - [If you can't send or receive messages on your iPhone or iPad](https://support.apple.com/en-us/118433) — general send/receive failures.
 - [Messages support](https://support.apple.com/messages) — Apple's full Messages support hub.
 
+## Photon receives different text than the sender sees in Messages
+
+In rare cases, especially when someone types and sends very quickly, the text
+Apple delivers to the Photon line can differ from the text shown in the
+sender's iMessage bubble. Spectrum exposes the payload received from Apple; it
+cannot recover or compare the text rendered only in the sender's Messages app.
+This mismatch happens upstream of Photon.
+
+Try the following on the sender's iPhone:
+
+- Update to the latest iOS version. Apple's [iOS 26.4 release
+  notes](https://support.apple.com/en-us/123075#a264) include improved keyboard
+  accuracy when typing quickly.
+- Pause briefly after typing before tapping **Send**.
+- If the mismatch continues, temporarily turn off **Auto-Correction** and
+  **Predictive Text** under **Settings → General → Keyboard**. See Apple's
+  [keyboard settings guide](https://support.apple.com/en-us/104995).
+
+Apple has not published a support article for this exact difference between the
+sender's bubble and the delivered payload. Related Apple Community reports
+describe [text changing when a message is
+submitted](https://discussions.apple.com/thread/252437975) and [autocorrection
+being applied when Send is
+tapped](https://discussions.apple.com/thread/255384316).
+
+If you report the issue to Photon, include the exact send time, the sender's iOS
+version, a screenshot of the sender's bubble, and the different text received by
+your application. This lets us confirm that the mismatch was already present in
+Apple's inbound payload.
+
 ## Still stuck?
 
 Send us:
