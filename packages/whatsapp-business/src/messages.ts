@@ -28,7 +28,9 @@ import {
   asPollOption,
   asReaction,
   asText,
+  asUnsend,
   createLogger,
+  errorAttrs,
   type ProviderMessageRecord,
   tracedFetch,
 } from "@spectrum-ts/core/authoring";
@@ -90,6 +92,54 @@ const cachePoll = (
     }
   }
 };
+
+interface CachedReaction {
+  emoji: string;
+  id: string;
+}
+const MAX_REACTION_CACHE_SIZE = 1000;
+const reactionCaches = new WeakMap<
+  WhatsAppClient,
+  Map<string, CachedReaction>
+>();
+
+const reactionCacheKey = (reactedId: string, from: string): string =>
+  `${reactedId}:${from}`;
+
+const cacheReaction = (
+  client: WhatsAppClient,
+  reactedId: string,
+  from: string,
+  entry: CachedReaction
+): void => {
+  let cache = reactionCaches.get(client);
+  if (!cache) {
+    cache = new Map<string, CachedReaction>();
+    reactionCaches.set(client, cache);
+  }
+  const key = reactionCacheKey(reactedId, from);
+  // Delete-then-set keeps a re-reaction fresh in LRU order.
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > MAX_REACTION_CACHE_SIZE) {
+    const first = cache.keys().next().value;
+    if (first !== undefined) {
+      cache.delete(first);
+    }
+  }
+};
+
+const getCachedReaction = (
+  client: WhatsAppClient,
+  reactedId: string,
+  from: string
+): CachedReaction | undefined =>
+  reactionCaches.get(client)?.get(reactionCacheKey(reactedId, from));
+
+const reactionTargetStub = (reactedId: string) => ({
+  id: reactedId,
+  content: asCustom({ whatsapp_type: "reaction-target", stub: true }),
+});
 
 const optionIndexFromId = (id: string): number | undefined => {
   if (!id.startsWith(OPTION_ID_PREFIX)) {
@@ -295,6 +345,53 @@ const toMessages = (
   ];
 };
 
+// Meta signals REMOVING a reaction as a reaction event whose emoji is the
+// protobuf default "" which is not a valid `reaction` content (asReaction
+// requires a non-empty emoji), and Meta doesn't say which emoji was removed
+// (one reaction per user per message).
+const mapReactionContent = (
+  client: WhatsAppClient,
+  msg: InboundMessage,
+  reaction: { messageId: string; emoji: string }
+): Content => {
+  const reactedId = reaction.messageId;
+  if (!reaction.emoji) {
+    const cached = getCachedReaction(client, reactedId, msg.from);
+    const removedReaction = cached
+      ? {
+          id: cached.id,
+          content: asReaction({
+            emoji: cached.emoji,
+            target: reactionTargetStub(reactedId) as Parameters<
+              typeof asReaction
+            >[0]["target"],
+          }),
+        }
+      : {
+          id: `${reactedId}:reaction:${msg.from}`,
+          content: asCustom({
+            whatsapp_type: "reaction-removed",
+            messageId: reactedId,
+            stub: true,
+          }),
+        };
+    return asUnsend({
+      target: removedReaction as Parameters<typeof asUnsend>[0]["target"],
+    });
+  }
+  // Remember the add so a later removal can report which emoji left.
+  cacheReaction(client, reactedId, msg.from, {
+    id: msg.id,
+    emoji: reaction.emoji,
+  });
+  return asReaction({
+    emoji: reaction.emoji,
+    target: reactionTargetStub(reactedId) as Parameters<
+      typeof asReaction
+    >[0]["target"],
+  });
+};
+
 const mapContent = (client: WhatsAppClient, msg: InboundMessage): Content => {
   const { content } = msg;
   switch (content.type) {
@@ -318,19 +415,8 @@ const mapContent = (client: WhatsAppClient, msg: InboundMessage): Content => {
       return asCustom({ whatsapp_type: "sticker", ...content.sticker });
     case "location":
       return asCustom({ whatsapp_type: "location", ...content.location });
-    case "reaction": {
-      // WhatsApp reaction events carry only the target message id; synthesize
-      // a minimal target Message shape. Core's wrapProviderMessage inflates
-      // this into a full Message with react/reply methods at emit time.
-      const stubTarget = {
-        id: content.reaction.messageId,
-        content: asCustom({ whatsapp_type: "reaction-target", stub: true }),
-      };
-      return asReaction({
-        emoji: content.reaction.emoji,
-        target: stubTarget as Parameters<typeof asReaction>[0]["target"],
-      });
-    }
+    case "reaction":
+      return mapReactionContent(client, msg, content.reaction);
     case "interactive": {
       const inter = content.interactive;
       if (inter.type === "button_reply" || inter.type === "list_reply") {
@@ -547,7 +633,24 @@ const clientStream = (
     const pump = (async () => {
       try {
         for await (const event of eventStream) {
-          for (const m of toMessages(client, event.message)) {
+          // One unmappable event must not kill the live stream: a mapping
+          // throw here ends the merged stream for the whole project, and
+          // nothing downstream restarts it. Skip the event and keep pumping.
+          let mapped: WhatsAppMessage[];
+          try {
+            mapped = toMessages(client, event.message);
+          } catch (error) {
+            streamLog.warn(
+              "skipping unmappable whatsapp message event",
+              {
+                "spectrum.whatsapp.message_id": event.message.id,
+                ...errorAttrs(error),
+              },
+              error instanceof Error ? error : undefined
+            );
+            continue;
+          }
+          for (const m of mapped) {
             await emit(m);
           }
         }
@@ -593,6 +696,23 @@ export const send = async (
     // Cumulative receipt: the Cloud API marks `target` and every earlier
     // message in the conversation as read (blue ticks for the sender).
     await primary(clients).messages.markRead(parentWamid(content.target.id));
+    return;
+  }
+  if (content.type === "unsend") {
+    // The Cloud API can only retract reactions — resend the reaction with
+    // emoji: "" at the reacted message. Regular business messages cannot be
+    // deleted, so any other target stays unsupported.
+    const unsent = content.target.content;
+    if (unsent.type !== "reaction") {
+      throw UnsupportedError.content(content.type);
+    }
+    await primary(clients).messages.send({
+      to: spaceId,
+      reaction: {
+        messageId: parentWamid(unsent.target.id),
+        emoji: "",
+      },
+    });
     return;
   }
   const client = primary(clients);
