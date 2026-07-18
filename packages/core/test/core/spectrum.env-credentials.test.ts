@@ -42,10 +42,12 @@ describe("Spectrum() project credential env fallback", () => {
     await app.stop();
   });
 
-  it("accepts configured providers through the platforms option", async () => {
-    const app = await Spectrum({ platforms: [provider()] });
-    expect(app.__providers).toHaveLength(1);
-    await app.stop();
+  it("rejects the removed platforms option", async () => {
+    const options = {
+      platforms: [provider()],
+    } as unknown as Parameters<typeof Spectrum>[0];
+
+    await expect(Spectrum(options)).rejects.toThrow();
   });
 
   it("lets explicit credentials win over env", async () => {
