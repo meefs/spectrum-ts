@@ -9,6 +9,17 @@ import {
   type WhatsAppClients,
 } from "./types";
 
+// biome-ignore lint/performance/noBarrelFile: provider entrypoint exports its public helpers
+export {
+  asWhatsAppTemplate,
+  isWhatsAppTemplate,
+  type WhatsAppTemplate,
+  type WhatsAppTemplateInput,
+  whatsappTemplate,
+  whatsappTemplateSchema,
+} from "./content/template";
+export { WhatsAppPartialSendError } from "./errors/partial-send";
+
 export const whatsappBusiness = definePlatform("WhatsApp Business", {
   config: configSchema,
 

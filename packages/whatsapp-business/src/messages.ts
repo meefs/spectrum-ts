@@ -2,11 +2,13 @@ import type {
   ContactCard,
   ContactCardInput,
   InboundMessage,
+  TemplateInput,
   WhatsAppClient,
 } from "@photon-ai/whatsapp-business";
 import {
   type Contact,
   type Content,
+  type Group,
   type ManagedStream,
   mergeStreams,
   type Poll,
@@ -27,14 +29,18 @@ import {
   asGroup,
   asPollOption,
   asReaction,
+  asReply,
   asText,
   asUnsend,
+  asVoice,
   createLogger,
   errorAttrs,
   type ProviderMessageRecord,
   tracedFetch,
 } from "@spectrum-ts/core/authoring";
 import { extension as mimeExtension } from "mime-types";
+import { isWhatsAppTemplate, type WhatsAppTemplate } from "./content/template";
+import { WhatsAppPartialSendError } from "./errors/partial-send";
 import { pollOptionId, pollToInteractive } from "./poll";
 import type { WhatsAppClients, WhatsAppMessage } from "./types";
 
@@ -50,6 +56,8 @@ const primary = (clients: WhatsAppClients): WhatsAppClient => {
 };
 
 type WaSendResult = Awaited<ReturnType<WhatsAppClient["messages"]["send"]>>;
+
+type ContentOfType<T extends Content["type"]> = Extract<Content, { type: T }>;
 
 const toRecord = (
   result: WaSendResult,
@@ -140,6 +148,35 @@ const reactionTargetStub = (reactedId: string) => ({
   id: reactedId,
   content: asCustom({ whatsapp_type: "reaction-target", stub: true }),
 });
+
+// The Cloud API has no endpoint to fetch a message by wamid, so a quoted
+// reply's target degrades to a stub carrying just the id — same trade-off as
+// reactionTargetStub.
+const replyTargetStub = (quotedId: string) => ({
+  id: quotedId,
+  content: asCustom({ whatsapp_type: "reply-target", stub: true }),
+});
+
+// context.id does not always mean the user quoted a message: interactive and
+// button events carry it to reference the tapped interactive/template message
+// (poll votes resolve it against the poll cache instead), and reaction events
+// target a message rather than quote one.
+const REPLY_EXEMPT_TYPES = new Set(["interactive", "button", "reaction"]);
+
+// asReply (schema-level) rather than the reply() builder: inbound captioned
+// media maps to a group, which the builder rejects but the schema accepts.
+const withReplyContext = (msg: InboundMessage, content: Content): Content => {
+  const quotedId = msg.context?.id;
+  if (quotedId === undefined || REPLY_EXEMPT_TYPES.has(msg.content.type)) {
+    return content;
+  }
+  return asReply({
+    content: content as Parameters<typeof asReply>[0]["content"],
+    target: replyTargetStub(quotedId) as Parameters<
+      typeof asReply
+    >[0]["target"],
+  });
+};
 
 const optionIndexFromId = (id: string): number | undefined => {
   if (!id.startsWith(OPTION_ID_PREFIX)) {
@@ -333,14 +370,14 @@ const toMessages = (
     return msg.content.contacts.map((card, index) => ({
       ...base,
       id: multi ? `${msg.id}:${index}` : msg.id,
-      content: waContactToSpectrum(card),
+      content: withReplyContext(msg, waContactToSpectrum(card)),
     }));
   }
   return [
     {
       ...base,
       id: msg.id,
-      content: mapContent(client, msg),
+      content: withReplyContext(msg, mapContent(client, msg)),
     },
   ];
 };
@@ -401,7 +438,10 @@ const mapContent = (client: WhatsAppClient, msg: InboundMessage): Content => {
     case "video":
     case "audio":
     case "document": {
-      const media = lazyMedia(client, content.media);
+      const media =
+        content.type === "audio" && content.media.voice
+          ? lazyVoice(client, content.media)
+          : lazyMedia(client, content.media);
       const caption = content.media.caption?.trim();
       if (!caption) {
         return media;
@@ -473,24 +513,35 @@ const fetchMedia = async (
   return response;
 };
 
+const lazyMediaSource = (
+  client: WhatsAppClient,
+  media: { id: string; mimeType: string; filename?: string }
+) => ({
+  id: media.id,
+  name: media.filename ?? `media-${media.id}`,
+  mimeType: media.mimeType,
+  read: async () =>
+    Buffer.from(await (await fetchMedia(client, media.id)).arrayBuffer()),
+  stream: async () => {
+    const response = await fetchMedia(client, media.id);
+    if (!response.body) {
+      throw new Error("Media response missing body");
+    }
+    return response.body;
+  },
+});
+
 const lazyMedia = (
   client: WhatsAppClient,
   media: { id: string; mimeType: string; filename?: string }
-): Content =>
-  asAttachment({
-    id: media.id,
-    name: media.filename ?? `media-${media.id}`,
-    mimeType: media.mimeType,
-    read: async () =>
-      Buffer.from(await (await fetchMedia(client, media.id)).arrayBuffer()),
-    stream: async () => {
-      const response = await fetchMedia(client, media.id);
-      if (!response.body) {
-        throw new Error("Media response missing body");
-      }
-      return response.body;
-    },
-  });
+): Content => asAttachment(lazyMediaSource(client, media));
+
+// WhatsApp flags push-to-talk recordings with media.voice — surface them as
+// voice content so apps can tell a voice note from an audio file attachment.
+const lazyVoice = (
+  client: WhatsAppClient,
+  media: { id: string; mimeType: string; filename?: string }
+): Content => asVoice(lazyMediaSource(client, media));
 
 const mimeToMediaType = (
   mimeType: string
@@ -507,9 +558,7 @@ const mimeToMediaType = (
   return "document";
 };
 
-const voiceFilename = (
-  content: Extract<Content, { type: "voice" }>
-): string => {
+const voiceFilename = (content: ContentOfType<"voice">): string => {
   if (content.name) {
     return content.name;
   }
@@ -670,11 +719,138 @@ export const messages = (
   clients: WhatsAppClients
 ): ManagedStream<WhatsAppMessage> => mergeStreams(clients.map(clientStream));
 
+// Meta caps media captions at 1024 characters (image/video/document docs).
+const MAX_CAPTION_LENGTH = 1024;
+
+// Meta accepts captions only on image/video/document sends.
+const captionablePair = (
+  group: Group
+): { attachment: ContentOfType<"attachment">; caption: string } | undefined => {
+  if (group.items.length !== 2) {
+    return;
+  }
+  const contents = group.items.map((item) => item.content as Content);
+  const attachment = contents.find(
+    (c): c is ContentOfType<"attachment"> => c.type === "attachment"
+  );
+  const text = contents.find(
+    (c): c is ContentOfType<"text"> => c.type === "text"
+  );
+  const captionable =
+    attachment &&
+    text &&
+    mimeToMediaType(attachment.mimeType) !== "audio" &&
+    text.text.length <= MAX_CAPTION_LENGTH;
+  return captionable ? { attachment, caption: text.text } : undefined;
+};
+
+// A captionable [attachment, text] pair collapses to one captioned media
+// send — the shape our own inbound mapping produces for captioned media.
+// Every other composition falls back to sending each item as its own message
+// so no part of the group is silently dropped.
+const sendGroupParts = async (
+  clients: WhatsAppClients,
+  spaceId: string,
+  group: Group,
+  replyTo?: string
+): Promise<ProviderMessageRecord> => {
+  const pair = captionablePair(group);
+  if (pair) {
+    const client = primary(clients);
+    const { attachment, caption } = pair;
+    const { mediaId } = await client.media.upload({
+      file: await attachment.read(),
+      mimeType: attachment.mimeType,
+      filename: attachment.name,
+    });
+    const mediaType = mimeToMediaType(attachment.mimeType);
+    const mediaPayload =
+      mediaType === "document"
+        ? { id: mediaId, filename: attachment.name, caption }
+        : { id: mediaId, caption };
+    // send as a caption-text pair together, goes out as 1 obj.
+    return toRecord(
+      await client.messages.send({
+        to: spaceId,
+        ...(replyTo === undefined ? {} : { replyTo }),
+        [mediaType]: mediaPayload,
+      } as Parameters<typeof client.messages.send>[0]),
+      spaceId,
+      group
+    );
+  }
+  const sent: ProviderMessageRecord[] = [];
+  let first: ProviderMessageRecord | undefined;
+  for (const [index, item] of group.items.entries()) {
+    const itemContent = item.content as Content;
+    let record: ProviderMessageRecord | undefined;
+    try {
+      // Only the first part quotes the reply target — one bubble carrying
+      // the context reads better than every part quoting the same message.
+      record =
+        index === 0 && replyTo !== undefined
+          ? await replyToMessage(clients, spaceId, replyTo, itemContent)
+          : await send(clients, spaceId, itemContent);
+    } catch (error) {
+      if (sent.length === 0) {
+        // Nothing delivered yet thus we surface the original error untouched so
+        // core's UnsupportedError fallbacks (markdown/streamText downgrade,
+        // warn-and-skip) keep working.
+        throw error;
+      }
+      throw new WhatsAppPartialSendError({
+        sent,
+        failedIndex: index,
+        total: group.items.length,
+        cause: error,
+      });
+    }
+    if (record) {
+      sent.push(record);
+    }
+    first ??= record;
+  }
+  if (!first) {
+    throw UnsupportedError.content(group.type);
+  }
+  return { ...first, content: group };
+};
+
+// Flat languageCode and an (empty-ok) components array — the exact shapes the
+// SDK proto knows; the relay renames them to Meta's `language.code` /
+// `components` wire fields. Body params serialize as { type: "text", text }
+// parameter objects per Meta's template-messages docs.
+const toTemplateInput = (content: WhatsAppTemplate): TemplateInput => ({
+  name: content.name,
+  languageCode: content.languageCode,
+  components: content.bodyParams?.length
+    ? [
+        {
+          type: "body",
+          parameters: content.bodyParams.map((text) => ({
+            type: "text",
+            text,
+          })),
+        },
+      ]
+    : [],
+});
+
 export const send = async (
   clients: WhatsAppClients,
   spaceId: string,
   content: Content
 ): Promise<ProviderMessageRecord | undefined> => {
+  if (isWhatsAppTemplate(content)) {
+    return toRecord(
+      await primary(clients).messages.send({
+        to: spaceId,
+        template: toTemplateInput(content),
+      }),
+      spaceId,
+      content as unknown as Content
+    );
+  }
   if (content.type === "reply") {
     return await replyToMessage(
       clients,
@@ -775,13 +951,29 @@ export const send = async (
       cachePoll(client, result.messageId, content);
       return toRecord(result, spaceId, content);
     }
-    case "app":
-      // No mini-app surface on WhatsApp — send the bare URL as text.
+    case "richlink":
+      // WhatsApp renders link previews client-side from the URL's own OG
+      // metadata; previewUrl opts in (falls back to a plain link on failure).
       return toRecord(
-        await client.messages.send({ to: spaceId, text: await content.url() }),
+        await client.messages.send({
+          to: spaceId,
+          text: { body: content.url, previewUrl: true },
+        }),
         spaceId,
         content
       );
+    case "app":
+      // No mini-app surface on WhatsApp — send the URL with a link preview.
+      return toRecord(
+        await client.messages.send({
+          to: spaceId,
+          text: { body: await content.url(), previewUrl: true },
+        }),
+        spaceId,
+        content
+      );
+    case "group":
+      return await sendGroupParts(clients, spaceId, content);
     default:
       throw UnsupportedError.content(content.type);
   }
@@ -811,6 +1003,17 @@ export const replyToMessage = async (
   content: Content
 ): Promise<ProviderMessageRecord> => {
   const client = primary(clients);
+  if (isWhatsAppTemplate(content)) {
+    return toRecord(
+      await client.messages.send({
+        to: spaceId,
+        replyTo: messageId,
+        template: toTemplateInput(content),
+      }),
+      spaceId,
+      content as unknown as Content
+    );
+  }
   switch (content.type) {
     case "text":
       return toRecord(
@@ -878,17 +1081,31 @@ export const replyToMessage = async (
       cachePoll(client, result.messageId, content);
       return toRecord(result, spaceId, content);
     }
-    case "app":
-      // No mini-app surface on WhatsApp — send the bare URL as text.
+    case "richlink":
+      // WhatsApp renders link previews client-side from the URL's own OG
+      // metadata; previewUrl opts in (falls back to a plain link on failure).
       return toRecord(
         await client.messages.send({
           to: spaceId,
           replyTo: messageId,
-          text: await content.url(),
+          text: { body: content.url, previewUrl: true },
         }),
         spaceId,
         content
       );
+    case "app":
+      // No mini-app surface on WhatsApp — send the URL with a link preview.
+      return toRecord(
+        await client.messages.send({
+          to: spaceId,
+          replyTo: messageId,
+          text: { body: await content.url(), previewUrl: true },
+        }),
+        spaceId,
+        content
+      );
+    case "group":
+      return await sendGroupParts(clients, spaceId, content, messageId);
     default:
       throw UnsupportedError.content(content.type);
   }
