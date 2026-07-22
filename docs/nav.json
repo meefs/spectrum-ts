@@ -110,6 +110,21 @@
       ]
     },
     {
+      "group": "Integrations",
+      "pages": [
+        "integrations/chat-sdk"
+      ]
+    },
+    {
+      "group": "Best Practices",
+      "pages": [
+        "best-practices/architecture",
+        "best-practices/inbound-pipeline",
+        "best-practices/recovery-and-state",
+        "best-practices/imessage-deliverability"
+      ]
+    },
+    {
       "group": "Troubleshooting",
       "pages": [
         "spectrum-ts/troubleshooting/imessage"
