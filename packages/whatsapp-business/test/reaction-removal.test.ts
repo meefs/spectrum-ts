@@ -1,4 +1,5 @@
 import type { WhatsAppClient } from "@photon-ai/whatsapp-business";
+import { collectUntilIdle } from "@spectrum-ts/test-support/timing";
 import { describe, expect, it } from "vitest";
 import { messages } from "@/messages";
 import type { WhatsAppMessage } from "@/types";
@@ -40,15 +41,11 @@ const textEvent = (id: string, body: string) => ({
   content: { type: "text", body },
 });
 
-const receiveAll = async (
-  client: WhatsAppClient
-): Promise<WhatsAppMessage[]> => {
-  const received: WhatsAppMessage[] = [];
-  for await (const m of messages([client])) {
-    received.push(m);
-  }
-  return received;
-};
+// The messages stream deliberately stays open when a line's event stream ends
+// — a deprovisioned line must not end the whole app's stream — so collect until
+// it goes idle rather than waiting for EOF.
+const receiveAll = (client: WhatsAppClient): Promise<WhatsAppMessage[]> =>
+  collectUntilIdle(messages([client]));
 
 describe("whatsapp reaction removal", () => {
   it("surfaces an emoji reaction as reaction content", async () => {

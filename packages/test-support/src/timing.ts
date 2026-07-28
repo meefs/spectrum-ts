@@ -38,3 +38,46 @@ export const settleSoon = (
 // promises (e.g. a tracker's background share) settle before assertions.
 export const flush = (): Promise<void> =>
   new Promise((resolve) => setImmediate(resolve));
+
+// Drain a stream until it goes idle, then close it. For streams whose lifetime
+// is owned by the holder rather than its sources (createStreamGroup), "no more
+// messages" cannot be observed as EOF — a provider's line ending must not end
+// the app's stream — so idleness is the terminator.
+export const collectUntilIdle = async <T>(
+  source: AsyncIterable<T> & { close(): Promise<void> }
+): Promise<T[]> => {
+  const iterator = source[Symbol.asyncIterator]();
+  const received: T[] = [];
+  let closed = false;
+  // Idempotent: the timeout path closes, and a `next` that rejects afterwards
+  // reaches the catch below, which must not close a second time.
+  const close = async (): Promise<void> => {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    await source.close();
+  };
+
+  try {
+    for (;;) {
+      const next = iterator.next();
+      if ((await withinMs(next, NO_MESSAGE_WAIT_MS)) === "timeout") {
+        await close();
+        await settleSoon(next);
+        break;
+      }
+      const result = await next;
+      if (result.done) {
+        break;
+      }
+      received.push(result.value);
+    }
+  } catch (error) {
+    // A failing stream still has to be released, or the caller leaks it and the
+    // real failure gets buried under a hanging suite.
+    await close();
+    throw error;
+  }
+  return received;
+};

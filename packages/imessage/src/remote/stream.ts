@@ -16,12 +16,14 @@ import {
 import {
   type CloseableAsyncIterable,
   createLogger,
+  createStreamGroup,
   errorAttrs,
   type ResumableStreamItem,
   resumableOrderedStream,
 } from "@spectrum-ts/core/authoring";
 import { getCloudRecover } from "../auth";
 import { getMessageCache, getPollCache, type PollCache } from "../cache";
+import { addLineObserver, lineKey } from "../lines";
 import {
   type IMessageMessage,
   type RemoteClient,
@@ -508,21 +510,54 @@ export const messages = (
   // return undefined (nothing to refresh). Shared across this client array's
   // streams so the message + poll loops coalesce onto one re-mint.
   const recover = getCloudRecover(clients);
-  const includeGroupEvents = !isSharedMode(clients);
-  return mergeStreams(
-    clients.map((entry) => {
-      const tracker =
-        staticShareEnabled || profileSyncGate
-          ? getContactShareTracker(entry.client)
-          : undefined;
-      return clientStream(
-        entry.client,
-        pollCache,
-        entry.phone,
-        includeGroupEvents,
-        tracker ? contactShareHandler(tracker, profileSyncGate) : undefined,
-        recover
-      );
-    })
-  );
+  const shared = isSharedMode(clients);
+  // Frozen for the life of the stream, which is correct: only a shared array
+  // makes this false, and a shared array never reconciles.
+  const includeGroupEvents = !shared;
+
+  const build = (entry: RemoteClient) => (): ManagedStream<IMessageMessage> => {
+    const tracker =
+      staticShareEnabled || profileSyncGate
+        ? getContactShareTracker(entry.client)
+        : undefined;
+    return clientStream(
+      entry.client,
+      pollCache,
+      entry.phone,
+      includeGroupEvents,
+      tracker ? contactShareHandler(tracker, profileSyncGate) : undefined,
+      recover
+    );
+  };
+
+  // A group rather than `mergeStreams`, because the line set changes underneath
+  // us: the cloud token refresh reconciles newly provisioned and deprovisioned
+  // lines into the same array, and those have to reach a running stream.
+  const group = createStreamGroup<IMessageMessage>({
+    label: "imessage.messages",
+  });
+  for (const entry of clients) {
+    group.add(lineKey(entry), build(entry));
+  }
+
+  if (shared) {
+    return group;
+  }
+
+  const disposeObserver = addLineObserver(clients, {
+    attach: (entry) => {
+      group.add(lineKey(entry), build(entry));
+    },
+    detach: (entry) => group.remove(lineKey(entry)).then(() => undefined),
+  });
+
+  // Drop the observer when the stream closes: it holds this group, and a later
+  // reconcile must not keep calling into a group that can no longer emit.
+  const closeGroup = group.close.bind(group);
+  return Object.assign(group, {
+    close: async (): Promise<void> => {
+      disposeObserver();
+      await closeGroup();
+    },
+  });
 };

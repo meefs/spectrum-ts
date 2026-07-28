@@ -1,4 +1,5 @@
 import type { WhatsAppClient } from "@photon-ai/whatsapp-business";
+import { collectUntilIdle } from "@spectrum-ts/test-support/timing";
 import { describe, expect, it } from "vitest";
 import { messages } from "@/messages";
 import type { WhatsAppMessage } from "@/types";
@@ -164,10 +165,10 @@ describe("whatsapp inbound quoted-reply context", () => {
       events: { subscribe: () => ({ filter: () => filtered }) },
     } as unknown as WhatsAppClient;
 
-    const received: WhatsAppMessage[] = [];
-    for await (const m of messages([client])) {
-      received.push(m);
-    }
+    // The stream deliberately stays open when a line's event stream ends — a
+    // deprovisioned line must not end the whole app's stream — so collect until
+    // it goes idle rather than waiting for EOF.
+    const received = await collectUntilIdle(messages([client]));
 
     expect(received).toHaveLength(1);
     expect(received[0]?.id).toBe("wamid.OK1");
