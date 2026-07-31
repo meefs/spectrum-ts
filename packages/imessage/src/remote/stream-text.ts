@@ -9,6 +9,7 @@ import {
 } from "@spectrum-ts/core/authoring";
 import { unsupportedRemoteContent } from "../shared/errors";
 import { toChatGuid, toMessageGuid } from "./ids";
+import { toMessageMetadata } from "./message-metadata";
 
 // Delivery pacing is fixed logic, not configurable. iMessage's native edit
 // replaces the whole message body, so each update sends the full accumulated
@@ -102,10 +103,17 @@ export const sendStreamText = async (
   // Always finish on the complete text (no-op if the last edit already had it).
   await flushEdit(full);
 
+  // The first-chunk response is authoritative only when no edit occurred.
+  // After an edit, its delivery, lifecycle, formatting, and native text fields
+  // are stale; omit that snapshot and retain the final text we know locally.
+  const metadata = editCount === 0 ? toMessageMetadata(sent) : {};
+
   return {
+    ...metadata,
     id: sent.guid,
     content: asText(full),
     direction: "outbound",
+    nativeText: full,
     space: { id: spaceId },
     timestamp: sent.dateCreated,
   };
