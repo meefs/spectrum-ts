@@ -117,7 +117,8 @@
     {
       "group": "Integrations",
       "pages": [
-        "integrations/chat-sdk"
+        "integrations/chat-sdk",
+        "integrations/eve"
       ]
     },
     {
