@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Spectrum</h1>
+  <h1>Photon (Spectrum)</h1>
   <p><strong>Bring agents to any interface.</strong></p>
   
   Photon (photon.codes) builds Spectrum, a multi-channel agent framework that makes AI agents reachable over real conversation surfaces like iMessage, SMS, and email instead of trapping them in web chat.
